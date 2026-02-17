@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import asyncio
 import os
+import re
 import yaml
 from loguru import logger
 
@@ -1244,7 +1245,6 @@ Provide your analysis in a structured format."""
             result['recommended_action'] = 'SELL'
         
         # Try to extract confidence
-        import re
         conf_match = re.search(r'confidence[:\s]+([0-9.]+)', response_lower)
         if conf_match:
             try:
