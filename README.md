@@ -5,12 +5,25 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Security: Updated](https://img.shields.io/badge/security-updated-green.svg)](SECURITY.md)
 
-An advanced AI-powered automated trading system that supports both stocks and cryptocurrencies, featuring a unique architecture combining high-frequency monitoring with intelligent anomaly detection.
+An advanced AI-powered automated trading system supporting both **long-term** and **short-term (intraday/swing)** trading strategies for stocks and cryptocurrencies.
 
 ## 🎯 Key Features
 
+### 🔥 NEW: Short-Term Trading Mode
+- **Ultra-Fast Monitoring** (5s intervals): Real-time price action tracking
+- **5 Specialized Short-Term Strategies**:
+  - 🚀 Intraday Breakout (1-24 hour holds)
+  - 📊 Minute MA Cross (scalping/swing)
+  - 💫 Momentum Reversal (oversold bounces)
+  - 📈 Order Flow Anomaly (large order detection)
+  - 📰 News Momentum (event-driven trades)
+- **Tight Risk Management**: 1-3% stop loss, 1.5-5% take profit targets
+- **Tiered Profit Taking**: Quick (1.5%), Main (2.5%), Max (5%) exits
+- **Intraday Limits**: Max trades/day, consecutive loss protection
+- **Order Flow Analysis**: Real-time order book imbalance, large order detection
+
 ### Intelligent Architecture
-- **High-Frequency Monitoring** (15s intervals): Uses dedicated AI models for fast, efficient market analysis
+- **Dual-Mode Operation**: Switch between short-term (5s) and long-term (15s) monitoring
 - **Anomaly-Triggered Deep Analysis**: LLM-based analysis (Phi-3.5 Mini) activated only when anomalies are detected
 - **Multi-Asset Support**: Stocks (Yahoo Finance) + Cryptocurrencies (Upbit WebSocket)
 - **Zero-Cost Operation**: $0/month using free APIs and open-source models
@@ -25,14 +38,16 @@ An advanced AI-powered automated trading system that supports both stocks and cr
 
 #### LLM (Anomaly-Triggered, 2-3s)
 - **Phi-3.5 Mini**: Deep contextual analysis when anomalies detected
-- **Smart Prompt Engineering**: Structured decision-making framework
+- **Smart Prompt Engineering**: Short-term vs long-term decision frameworks
 - **Risk Assessment**: Automated risk scoring and recommendations
 
 ### Trading Capabilities
-- **Multiple Strategies**: Trend Following, Mean Reversion, Momentum
-- **Advanced Risk Management**: Position sizing, stop-loss, take-profit
+- **Short-Term Strategies**: Intraday Breakout, Minute MA Cross, Momentum Reversal, Order Flow Anomaly, News Momentum
+- **Long-Term Strategies**: Trend Following, Mean Reversion, Momentum
+- **Advanced Risk Management**: Position sizing, tiered take profits, trailing stop loss
 - **Real-time Execution**: Order management with dry-run mode
 - **Portfolio Tracking**: P&L, win rate, Sharpe ratio, max drawdown
+- **Backtesting**: Minute-level backtesting with realistic slippage and fees
 
 ### Data Sources
 - **Stocks**: Yahoo Finance API (10 symbols, 2000 req/hour)
@@ -116,6 +131,69 @@ python main.py
 
 ## ⚙️ Configuration
 
+### Switching Between Trading Modes
+
+Edit `openclaw/config/strategy_config.yaml`:
+
+```yaml
+# Set trading mode: "short_term" or "long_term"
+trading_mode: "short_term"  # Change to "long_term" for swing/position trading
+
+# Short-term timeframes
+timeframes:
+  primary: "5m"      # 5-minute charts
+  secondary: "15m"   # 15-minute charts
+  tick: "1m"         # 1-minute tick data
+```
+
+### Short-Term Strategy Configuration
+
+```yaml
+strategies:
+  - name: "Intraday Breakout"
+    enabled: true
+    weight: 0.3
+    parameters:
+      breakout_threshold: 0.005  # 0.5% breakout
+      volume_multiplier: 2.0      # 2x volume confirmation
+      stop_loss: 0.01             # 1% stop loss
+      take_profit: 0.02           # 2% take profit
+      
+  - name: "Minute MA Cross"
+    enabled: true
+    weight: 0.25
+    parameters:
+      fast_ma: 5
+      slow_ma: 15
+      rsi_threshold: 70
+      take_profit: 0.025          # 2.5% target
+```
+
+### Short-Term Risk Management (`openclaw/config/risk_config.yaml`)
+
+```yaml
+risk_management:
+  max_position_size: 0.2          # 20% per position (higher for short-term)
+  max_daily_loss: 0.03            # 3% max daily loss
+  min_risk_reward_ratio: 2.0      # 2:1 minimum
+
+stop_loss:
+  type: "trailing"                # Trailing stop
+  initial_percentage: 0.01        # 1% initial stop
+  trailing_step: 0.005            # Move up 0.5% per step
+
+take_profit:
+  type: "tiered"                  # Tiered exits
+  quick_profit: 0.015             # 1.5% - sell 33%
+  main_profit: 0.025              # 2.5% - sell 33%
+  max_profit: 0.05                # 5% - sell remaining
+
+intraday_limits:
+  max_trades_per_day: 5           # Max 5 trades/day
+  max_consecutive_losses: 3       # Stop after 3 losses
+  min_time_between_trades_minutes: 30
+```
+
 ### API Configuration (`openclaw/config/api_config.yaml`)
 
 ```yaml
@@ -133,10 +211,12 @@ upbit:
     # ... more cryptos
 ```
 
-### Strategy Configuration (`openclaw/config/strategy_config.yaml`)
+### Legacy Long-Term Strategy Configuration
 
 ```yaml
-strategies:
+trading_mode: "long_term"
+
+legacy_strategies:
   - name: "Trend Following"
     enabled: true
     parameters:
@@ -157,15 +237,24 @@ risk_management:
 ## 📈 Performance Metrics
 
 ### Resource Usage
-- **CPU**: <15% (high-frequency loop)
+- **CPU**: <15% (short-term mode), <10% (long-term mode)
 - **Memory**: <2GB (without AI models), <8GB (with all models)
 - **Network**: Minimal (<100KB/s average)
 
 ### Processing Speed
-- **High-frequency cycle**: <500ms target (includes data fetch + analysis)
+- **Short-term cycle**: <200ms target (5s interval)
+- **Long-term cycle**: <500ms target (15s interval)
 - **Anomaly detection**: ~10ms
 - **Sentiment analysis**: ~50ms
 - **LLM deep analysis**: 2-3s (only on anomalies)
+
+### Short-Term Trading Performance Expectations
+- **Holding Period**: Minutes to 24 hours
+- **Target Win Rate**: 55-65%
+- **Average R:R Ratio**: 2:1 (risk $1 to make $2)
+- **Daily Trades**: 1-5 per day (limited by risk management)
+- **Expected Slippage**: 0.1-0.2% per trade
+- **Commission**: ~0.1% per trade
 
 ### API Cost Analysis
 | Service | Free Tier | Usage | Monthly Cost |
@@ -194,7 +283,7 @@ pytest --cov=openclaw openclaw/tests/
 
 ## 📝 Usage Examples
 
-### Basic Usage
+### Basic Usage - Short-Term Mode
 
 ```python
 from openclaw.core.engine import OpenClawEngine
@@ -202,33 +291,80 @@ from openclaw.utils.logger import setup_logger
 
 async def main():
     logger = setup_logger()
+    
+    # Initialize engine (reads trading_mode from config)
     engine = OpenClawEngine()
     
     await engine.start()
-    # Engine will run monitoring loops automatically
+    # Engine will monitor every 5 seconds in short-term mode
+    # Generates signals from 5 short-term strategies
 ```
 
-### Custom Strategy
+### Short-Term Strategy Example
 
 ```python
-from openclaw.skills.analysis import StrategyEngine
+from openclaw.skills.analysis import TechnicalAnalysis
 
-# Add custom strategy to config/strategy_config.yaml
-strategies_config = [
-    {
-        "name": "My Custom Strategy",
-        "enabled": True,
-        "parameters": {
-            "custom_param": 42
-        }
-    }
-]
+# Calculate short-term indicators
+ta = TechnicalAnalysis()
+
+# Fast RSI for quick entries
+fast_rsi = ta.calculate_fast_rsi(prices, period=5)
+
+# Minute-level moving averages
+minute_mas = ta.calculate_minute_mas(minute_prices)
+print(f"MA5: {minute_mas['ma_5']}, MA15: {minute_mas['ma_15']}")
+
+# Detect intraday breakouts
+breakout = ta.detect_intraday_high_low(
+    prices=intraday_prices,
+    current_price=current,
+    threshold=0.005  # 0.5%
+)
+
+# Volume anomaly detection
+volume_spike = ta.detect_volume_anomaly(
+    current_volume=current_vol,
+    historical_volumes=hist_vols,
+    threshold=2.5  # 2.5x average
+)
 ```
 
-### Risk Management
+### Order Flow Analysis
+
+```python
+from openclaw.skills.analysis.order_flow_analysis import OrderFlowAnalysis
+
+analyzer = OrderFlowAnalysis(large_order_threshold=100000)
+
+# Analyze order book imbalance
+order_book_analysis = analyzer.analyze_order_book(
+    bids=bid_orders,
+    asks=ask_orders,
+    depth_levels=10
+)
+
+# Detect large orders
+large_orders = analyzer.detect_large_orders(
+    recent_trades=trades,
+    time_window_seconds=60
+)
+
+# Calculate overall order flow strength
+strength = analyzer.calculate_order_flow_strength(
+    order_book_data=order_book_analysis,
+    large_order_data=large_orders,
+    tape_data=tape_analysis
+)
+```
+
+### Short-Term Risk Management
 
 ```python
 from openclaw.skills.analysis import RiskManagement
+
+# Initialize with short-term config
+risk_mgr = RiskManagement(risk_config)
 
 risk_mgr = RiskManagement(risk_config)
 
@@ -255,32 +391,50 @@ All dependencies are regularly updated to patch known vulnerabilities. See [SECU
 
 ### Built-in Safety Features
 - **Dry Run Mode**: Default mode simulates trading without real execution
+- **Short-Term Risk Limits**: 
+  - Maximum trades per day (default: 5)
+  - Consecutive loss protection (stops after 3 losses)
+  - Position time limits (auto-close after max hold time)
+  - Daily loss limits (3% for short-term mode)
 - **Risk Limits**: Multiple layers of risk management
 - **Position Sizing**: Automatic calculation based on portfolio value
-- **Stop Loss**: Configurable stop-loss mechanisms
+- **Tiered Stop Loss**: Trailing stops that move with profit
 - **Input Validation**: All external inputs validated
 - **Secure Defaults**: No hardcoded secrets, environment-based configuration
 
 ### Important Warnings
 ⚠️ **This system is for educational purposes only**
+⚠️ **Short-term trading is HIGH RISK and not suitable for everyone**
 ⚠️ **Always test thoroughly in dry-run mode before live trading**
+⚠️ **Start with small position sizes (10-20% max)**
+⚠️ **Never trade during high-impact news without understanding the risks**
 ⚠️ **Never invest more than you can afford to lose**
 ⚠️ **Past performance does not guarantee future results**
 ⚠️ **Review [SECURITY.md](SECURITY.md) before deployment**
+⚠️ **Short-term strategies require constant monitoring**
+⚠️ **Slippage and fees can significantly impact short-term profitability**
 
 ## 📚 Project Structure
 
 ```
 openclaw/
 ├── config/                 # Configuration files
-│   ├── api_config.yaml
-│   ├── strategy_config.yaml
-│   └── risk_config.yaml
+│   ├── api_config.yaml     # API endpoints and symbols
+│   ├── strategy_config.yaml # Trading mode and strategies
+│   └── risk_config.yaml    # Risk parameters
 ├── skills/                 # Modular skills
 │   ├── data_collection/   # Market data & news
 │   ├── analysis/          # AI models & strategies
+│   │   ├── strategy_engine.py       # 5 short-term + 3 long-term strategies
+│   │   ├── technical_analysis.py    # Fast indicators for short-term
+│   │   ├── risk_management.py       # Tiered exits, intraday limits
+│   │   ├── order_flow_analysis.py   # Order book & large orders (NEW)
+│   │   └── ai_models.py             # Short-term LLM prompts
+│   ├── backtesting/       # Backtesting framework (NEW)
+│   │   └── short_term_backtest.py   # Minute-level backtesting
 │   ├── execution/         # Order & position management
 │   └── monitoring/        # System health & alerts
+│       └── alert_manager.py         # Short-term signal alerts
 ├── core/                  # Core engine
 │   ├── engine.py         # Main orchestration
 │   ├── scheduler.py      # Task scheduling

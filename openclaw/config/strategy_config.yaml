@@ -1,19 +1,99 @@
+# Trading mode: "long_term" or "short_term"
+# ⚠️ WARNING: short_term mode uses 5-second monitoring and aggressive parameters
+# Start with long_term mode if you're new to automated trading
+trading_mode: "long_term"  # Default to safer long-term mode (change to "short_term" when ready)
+
+# Timeframes for short-term trading
+timeframes:
+  primary: "5m"      # Primary timeframe: 5 minutes
+  secondary: "15m"   # Secondary timeframe: 15 minutes
+  tick: "1m"         # Tick timeframe: 1 minute
+
+# Short-term strategies configuration
 strategies:
-  - name: "Trend Following"
+  # Strategy 1: Intraday Breakout - Break daily high/low with volume
+  - name: "Intraday Breakout"
     enabled: true
+    weight: 0.3
+    parameters:
+      breakout_threshold: 0.005    # 0.5% breakout threshold
+      volume_multiplier: 2.0       # Volume must be 2x average
+      stop_loss: 0.01              # 1% stop loss
+      take_profit: 0.02            # 2% take profit
+      max_hold_time_hours: 24      # Maximum 1 day hold
+      intraday_closeout: true      # Force close at market close
+      
+  # Strategy 2: Minute MA Cross - Fast MA crossover strategy
+  - name: "Minute MA Cross"
+    enabled: true
+    weight: 0.25
+    parameters:
+      fast_ma: 5                   # 5-period MA
+      slow_ma: 15                  # 15-period MA
+      rsi_threshold: 70            # Don't buy if RSI > 70
+      stop_loss: 0.015             # 1.5% stop loss
+      take_profit: 0.025           # 2.5% take profit
+      max_hold_time_hours: 12      # Maximum 12 hours
+      
+  # Strategy 3: Momentum Reversal - Oversold bounce strategy
+  - name: "Momentum Reversal"
+    enabled: true
+    weight: 0.25
+    parameters:
+      reversal_threshold: 0.03     # 3% drop to trigger
+      rsi_oversold: 30             # RSI must be < 30
+      volume_surge: 2.5            # Volume 2.5x average
+      take_profit: 0.015           # 1.5% quick profit
+      stop_loss: 0.02              # 2% stop loss
+      max_hold_time_hours: 4       # Maximum 4 hours
+      
+  # Strategy 4: Order Flow Anomaly - Large order detection
+  - name: "Order Flow Anomaly"
+    enabled: true
+    weight: 0.1
+    parameters:
+      large_order_threshold: 100000  # Large order size threshold
+      order_count: 3                 # Consecutive large orders
+      take_profit: 0.015             # 1.5% quick profit
+      stop_loss: 0.01                # 1% stop loss
+      max_hold_time_hours: 2         # Maximum 2 hours
+      
+  # Strategy 5: News Momentum - News-driven short-term trades
+  - name: "News Momentum"
+    enabled: true
+    weight: 0.1
+    parameters:
+      sentiment_threshold: 0.8     # Sentiment score > 0.8
+      price_momentum: 0.01         # Price up > 1%
+      take_profit: 0.04            # 4% target
+      stop_loss: 0.02              # 2% stop loss
+      max_hold_time_hours: 6       # Maximum 6 hours
+      news_age_minutes: 60         # News must be < 1 hour old
+
+# Legacy strategies (for backward compatibility with long_term mode)
+legacy_strategies:
+  - name: "Trend Following"
+    enabled: false
     parameters:
       ma_short: 20
       ma_long: 50
       
   - name: "Mean Reversion"
-    enabled: true
+    enabled: false
     parameters:
       bb_period: 20
       bb_std: 2
       
   - name: "Momentum"
-    enabled: true
+    enabled: false
     parameters:
       rsi_period: 14
       rsi_oversold: 30
       rsi_overbought: 70
+
+# Signal aggregation settings
+signal_aggregation:
+  method: "weighted_vote"        # Aggregation method: weighted_vote or consensus
+  min_confidence: 0.6            # Minimum confidence threshold (60%)
+  require_multi_strategy: true   # Require multiple strategies to agree
+  min_strategy_count: 2          # Minimum number of strategies that must agree
