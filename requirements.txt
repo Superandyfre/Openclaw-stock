@@ -1,0 +1,33 @@
+# Core framework
+aiohttp==3.13.3  # Security: Fixed zip bomb, DoS, and directory traversal vulnerabilities
+
+# Data processing
+pandas==2.2.3  # Updated to latest stable 2.x version
+numpy==1.26.4  # Updated to latest 1.x version
+
+# WebSocket
+websockets==14.1  # Updated to latest stable version
+
+# API clients
+yfinance==0.2.52  # Updated to latest version
+requests==2.32.3  # Updated for security patches
+python-binance==1.0.19
+
+# Database
+redis==5.2.1  # Updated to latest 5.x version
+psycopg2-binary==2.9.10  # Updated to latest version
+sqlalchemy==2.0.36  # Updated to latest 2.0.x version
+
+# Configuration management
+pyyaml==6.0.2  # Updated to latest version
+python-dotenv==1.0.1  # Updated to latest version
+
+# Logging
+loguru==0.7.3  # Updated to latest version
+
+# Alert notifications
+python-telegram-bot==21.9  # Updated to latest stable version
+
+# Testing
+pytest==8.3.4  # Updated to latest stable version
+pytest-asyncio==0.24.0  # Updated to latest version

@@ -1,0 +1,20 @@
+# Deep learning framework
+torch==2.6.0  # Security: Fixed heap buffer overflow, use-after-free, and RCE vulnerabilities
+torchvision==0.21.0  # Updated to match torch 2.6.0
+
+# Transformer models
+transformers==4.48.0  # Security: Fixed deserialization of untrusted data vulnerabilities
+tokenizers==0.21.0  # Updated to match transformers 4.48.0
+accelerate==1.2.1  # Updated to latest stable version
+
+# Time series forecasting
+# git+https://github.com/amazon-science/chronos-forecasting.git
+prophet==1.1.6  # Updated to latest version
+
+# Traditional machine learning
+scikit-learn==1.6.1  # Updated to latest stable version
+
+# Technical analysis
+# TA-Lib requires system library installation first
+# TA-Lib==0.4.28
+pandas-ta==0.3.14b
