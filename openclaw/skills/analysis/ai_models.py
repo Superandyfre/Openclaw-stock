@@ -363,6 +363,73 @@ Provide:
 4. Confidence level (0-1)
 """
     
+    def construct_short_term_analysis_prompt(
+        self,
+        symbol: str,
+        context: Dict[str, Any]
+    ) -> str:
+        """
+        Construct short-term trading analysis prompt for LLM
+        
+        Args:
+            symbol: Asset symbol
+            context: Market context with short-term data
+        
+        Returns:
+            Formatted prompt for LLM analysis
+        """
+        prompt = f"""You are a professional short-term trader (intraday/swing). Analyze this opportunity for QUICK trading (holding period: minutes to 1 day).
+
+**Asset**: {symbol}
+**Current Price**: ${context.get('current_price', 0):.2f}
+
+**Minute-Level Price Action**:
+- 1-minute change: {context.get('change_1m', 0):.2f}%
+- 5-minute change: {context.get('change_5m', 0):.2f}%
+- 15-minute change: {context.get('change_15m', 0):.2f}%
+- Intraday change: {context.get('change_today', 0):.2f}%
+
+**Short-Term Technical Indicators**:
+- 5-minute RSI: {context.get('rsi_5m', 50):.1f}
+- 5-minute MACD: {context.get('macd_5m', 0):.2f}
+- MA(5): ${context.get('ma5', 0):.2f}
+- MA(15): ${context.get('ma15', 0):.2f}
+- Breaking intraday high: {context.get('break_high', False)}
+- Breaking intraday low: {context.get('break_low', False)}
+
+**Order Flow & Volume**:
+- 1-minute volume: {context.get('volume_1m', 0):,}
+- 5-minute volume: {context.get('volume_5m', 0):,}
+- Volume vs average: {context.get('volume_ratio', 1.0):.2f}x
+- Buy/Sell ratio: {context.get('buy_sell_ratio', 1.0):.2f}
+- Large order flow: {context.get('large_order_flow', 'None')}
+
+**Recent News** (last 1 hour):
+{context.get('recent_news', 'No recent news')}
+
+**Current Position** (if any):
+{context.get('current_position', 'No position')}
+
+**SHORT-TERM TRADING REQUIREMENTS**:
+- Maximum holding period: 1 day (prefer hours)
+- Stop loss: 1-2% (tight)
+- Take profit targets: 1.5% (quick), 2.5% (main), 5% (stretch)
+- Focus on: Price action, momentum, volume spikes, order flow
+
+**Please provide**:
+1. **Action**: BUY / SELL / HOLD
+2. **Position Size**: 10-30% of capital
+3. **Entry Price**: Precise entry point
+4. **Stop Loss**: Exact price level
+5. **Take Profit**: 3 levels (quick/main/stretch)
+6. **Expected Hold Time**: Minutes/hours/intraday close
+7. **Key Risks**: Main concerns for this trade
+8. **Confidence**: 1-10 scale
+
+**Think like a scalper/day trader**: Quick in, quick out. Don't overthink it."""
+        
+        return prompt
+    
     def _rule_based_anomaly_analysis(
         self,
         anomaly_data: Dict[str, Any],

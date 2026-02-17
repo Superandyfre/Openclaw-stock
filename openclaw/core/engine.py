@@ -51,6 +51,13 @@ class OpenClawEngine:
         self.strategy_config = self._load_config("strategy_config.yaml")
         self.risk_config = self._load_config("risk_config.yaml")
         
+        # Determine trading mode
+        self.trading_mode = self.strategy_config.get('trading_mode', 'short_term')
+        self.monitoring_interval = 5 if self.trading_mode == 'short_term' else 15
+        
+        logger.info(f"Trading mode: {self.trading_mode}")
+        logger.info(f"Monitoring interval: {self.monitoring_interval} seconds")
+        
         # Initialize components
         self.scheduler = Scheduler()
         self.db = DatabaseManager()
@@ -58,7 +65,10 @@ class OpenClawEngine:
         self.technical_analysis = TechnicalAnalysis()
         self.sentiment_analysis = SentimentAnalysis()
         self.risk_manager = RiskManagement(self.risk_config['risk_management'])
-        self.strategy_engine = StrategyEngine(self.strategy_config['strategies'])
+        self.strategy_engine = StrategyEngine(
+            self.strategy_config['strategies'],
+            trading_mode=self.trading_mode
+        )
         self.system_monitor = SystemMonitor()
         self.alert_manager = AlertManager()
         
@@ -106,22 +116,24 @@ class OpenClawEngine:
     async def start(self):
         """Start the trading engine"""
         logger.info("🚀 Starting OpenClaw Trading Engine")
+        logger.info(f"Mode: {self.trading_mode}, Monitoring: every {self.monitoring_interval}s")
         
         self.running = True
         self.scheduler.start()
         
-        # Schedule high-frequency monitoring (15 seconds)
+        # Schedule high-frequency monitoring (5 seconds for short-term, 15 for long-term)
         await self.scheduler.schedule_periodic(
             "high_frequency_monitor",
             self._high_frequency_monitor_loop,
-            15  # 15 seconds
+            self.monitoring_interval
         )
         
-        # Schedule news monitoring (1 hour)
+        # Schedule news monitoring (15 minutes for short-term, 1 hour for long-term)
+        news_interval = 900 if self.trading_mode == 'short_term' else 3600  # 15 min vs 1 hour
         await self.scheduler.schedule_periodic(
             "news_monitor",
             self._news_monitor_loop,
-            3600  # 1 hour
+            news_interval
         )
         
         # Schedule announcement monitoring (1 hour)

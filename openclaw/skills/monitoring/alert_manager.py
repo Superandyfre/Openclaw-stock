@@ -171,3 +171,96 @@ class AlertManager:
             alerts = [a for a in alerts if a['level'] == level.value]
         
         return alerts[-count:]
+    
+    def generate_short_term_signal_alert(
+        self,
+        symbol: str,
+        signal: Dict[str, Any]
+    ) -> str:
+        """
+        Generate short-term trading signal alert
+        
+        Args:
+            symbol: Asset symbol
+            signal: Trading signal details
+        
+        Returns:
+            Formatted alert message
+        """
+        action = signal.get('action', 'HOLD')
+        strategy = signal.get('strategy', 'Unknown')
+        confidence = signal.get('confidence', 0) * 10
+        
+        emoji_map = {
+            'BUY': '🔥',
+            'SELL': '❌',
+            'HOLD': '⏸️'
+        }
+        
+        emoji = emoji_map.get(action, '📊')
+        
+        alert = f"{emoji} **SHORT-TERM OPPORTUNITY: {symbol}**\n\n"
+        alert += f"**Strategy**: {strategy}\n"
+        alert += f"**Action**: {action}\n"
+        alert += f"**Entry Price**: ${signal.get('price', 0):.2f}\n"
+        
+        if action == 'BUY':
+            alert += f"**Stop Loss**: ${signal.get('stop_loss', 0):.2f} (-{((signal.get('price', 0) - signal.get('stop_loss', 0)) / signal.get('price', 0) * 100):.1f}%)\n"
+            alert += f"**Take Profit**: ${signal.get('take_profit', 0):.2f} (+{((signal.get('take_profit', 0) - signal.get('price', 0)) / signal.get('price', 0) * 100):.1f}%)\n"
+            alert += f"**Expected Hold**: {signal.get('max_hold_hours', 6)} hours\n"
+        
+        alert += f"**Confidence**: {confidence:.0f}/10\n\n"
+        alert += f"**Reason**: {signal.get('reason', 'N/A')}\n\n"
+        alert += f"⚡ _Quick decision required - short-term opportunity!_"
+        
+        return alert
+    
+    def generate_position_alert(
+        self,
+        symbol: str,
+        position_type: str,
+        details: Dict[str, Any]
+    ) -> str:
+        """
+        Generate position management alert (stop hit, take profit, time limit)
+        
+        Args:
+            symbol: Asset symbol
+            position_type: Type of alert (stop_loss, take_profit, time_limit)
+            details: Position details
+        
+        Returns:
+            Formatted alert message
+        """
+        emoji_map = {
+            'stop_loss': '🛑',
+            'take_profit': '✅',
+            'time_limit': '⏰',
+            'trailing_stop': '📈'
+        }
+        
+        emoji = emoji_map.get(position_type, '📊')
+        
+        alert = f"{emoji} **POSITION UPDATE: {symbol}**\n\n"
+        
+        if position_type == 'stop_loss':
+            alert += "**Stop Loss Hit**\n"
+            alert += f"Entry: ${details.get('entry_price', 0):.2f}\n"
+            alert += f"Exit: ${details.get('exit_price', 0):.2f}\n"
+            alert += f"Loss: ${details.get('pnl', 0):.2f} ({details.get('pnl_pct', 0):.2f}%)\n"
+        
+        elif position_type == 'take_profit':
+            alert += "**Take Profit Target Hit!**\n"
+            alert += f"Entry: ${details.get('entry_price', 0):.2f}\n"
+            alert += f"Exit: ${details.get('exit_price', 0):.2f}\n"
+            alert += f"Profit: ${details.get('pnl', 0):.2f} (+{details.get('pnl_pct', 0):.2f}%)\n"
+        
+        elif position_type == 'time_limit':
+            alert += "**Time Limit Reached**\n"
+            alert += f"Held for: {details.get('hours_held', 0):.1f} hours\n"
+            alert += f"Current P&L: ${details.get('pnl', 0):.2f} ({details.get('pnl_pct', 0):.2f}%)\n"
+            alert += "Position closed automatically.\n"
+        
+        alert += f"\n_Position closed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"
+        
+        return alert
