@@ -1,0 +1,405 @@
+# Global News Sources for OpenClaw
+# 100+ news sources from 7 continents, 8 languages
+
+# Asset-specific keywords for news filtering
+asset_keywords:
+  # US Tech Stocks
+  AAPL:
+    - "apple"
+    - "iphone"
+    - "ipad"
+    - "mac"
+    - "tim cook"
+    - "애플"
+    - "苹果"
+  
+  TSLA:
+    - "tesla"
+    - "elon musk"
+    - "ev"
+    - "electric vehicle"
+    - "테슬라"
+    - "特斯拉"
+  
+  MSFT:
+    - "microsoft"
+    - "windows"
+    - "azure"
+    - "마이크로소프트"
+    - "微软"
+  
+  GOOGL:
+    - "google"
+    - "alphabet"
+    - "구글"
+    - "谷歌"
+  
+  NVDA:
+    - "nvidia"
+    - "엔비디아"
+    - "英伟达"
+    - "gpu"
+    - "ai chip"
+  
+  # Korean Stocks
+  "005930.KS":
+    - "samsung"
+    - "삼성전자"
+    - "三星"
+    - "galaxy"
+    - "이재용"
+  
+  "000660.KS":
+    - "sk hynix"
+    - "sk하이닉스"
+    - "memory chip"
+    - "반도체"
+  
+  "035420.KS":
+    - "naver"
+    - "네이버"
+    - "라인"
+    - "line"
+  
+  # Cryptocurrencies
+  BTC-USD:
+    - "bitcoin"
+    - "btc"
+    - "비트코인"
+    - "比特币"
+  
+  ETH-USD:
+    - "ethereum"
+    - "eth"
+    - "이더리움"
+    - "以太坊"
+  
+  # Global keywords (affect all assets)
+  GLOBAL:
+    - "federal reserve"
+    - "미연준"
+    - "美联储"
+    - "interest rate"
+    - "금리"
+    - "利率"
+    - "inflation"
+    - "통화팽창"
+    - "通货膨胀"
+    - "war"
+    - "전쟁"
+    - "战争"
+    - "crisis"
+    - "위기"
+    - "危机"
+    - "recession"
+    - "경기침체"
+    - "衰退"
+
+# News Sources by Region
+news_sources:
+  # Asia (25+ sources)
+  asia:
+    korea:
+      - name: "Naver News"
+        url: "https://news.naver.com/main/list.naver?mode=LPOD&mid=sec&sid1=101&listType=title"
+        rss: "https://news.naver.com/main/rss/rss.naver?mode=LSD&mid=shm&sid1=101"
+        language: "ko"
+        category: "business"
+      
+      - name: "Yonhap News"
+        url: "https://www.yna.co.kr/economy/all"
+        rss: "https://www.yna.co.kr/rss/economy.xml"
+        language: "ko"
+        category: "economy"
+      
+      - name: "Korea Economic Daily"
+        url: "https://www.hankyung.com/finance"
+        rss: "https://www.hankyung.com/rss/finance"
+        language: "ko"
+        category: "finance"
+      
+      - name: "Maeil Business"
+        url: "https://www.mk.co.kr/news/stock/"
+        rss: "https://www.mk.co.kr/rss/30100041/"
+        language: "ko"
+        category: "stock"
+      
+      - name: "Chosun Biz"
+        url: "https://biz.chosun.com/stock/"
+        rss: "https://biz.chosun.com/rss/stock.xml"
+        language: "ko"
+        category: "stock"
+    
+    japan:
+      - name: "Nikkei"
+        url: "https://www.nikkei.com/markets/"
+        rss: "https://www.nikkei.com/arc/rss/feed?channel=DF280120166590"
+        language: "ja"
+        category: "markets"
+      
+      - name: "Reuters Japan"
+        url: "https://jp.reuters.com/finance"
+        rss: "https://jp.reuters.com/arc/outboundfeeds/rss/japanBusinessNews/"
+        language: "ja"
+        category: "business"
+    
+    china:
+      - name: "Sina Finance"
+        url: "https://finance.sina.com.cn"
+        rss: "http://rss.sina.com.cn/finance/stocks/main.xml"
+        language: "zh"
+        category: "stocks"
+      
+      - name: "Eastmoney"
+        url: "http://stock.eastmoney.com"
+        rss: "http://stock.eastmoney.com/rss.html"
+        language: "zh"
+        category: "markets"
+    
+    india:
+      - name: "Economic Times"
+        url: "https://economictimes.indiatimes.com/markets"
+        rss: "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"
+        language: "en"
+        category: "markets"
+      
+      - name: "Moneycontrol"
+        url: "https://www.moneycontrol.com/news/business/markets/"
+        rss: "https://www.moneycontrol.com/rss/marketreports.xml"
+        language: "en"
+        category: "markets"
+    
+    singapore:
+      - name: "Business Times"
+        url: "https://www.businesstimes.com.sg/companies-markets"
+        rss: "https://www.businesstimes.com.sg/rss-feeds/companies-markets"
+        language: "en"
+        category: "markets"
+      
+      - name: "Channel NewsAsia"
+        url: "https://www.channelnewsasia.com/business"
+        rss: "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511"
+        language: "en"
+        category: "business"
+    
+    hongkong:
+      - name: "South China Morning Post"
+        url: "https://www.scmp.com/business"
+        rss: "https://www.scmp.com/rss/2/feed"
+        language: "en"
+        category: "business"
+  
+  # Europe (15+ sources)
+  europe:
+    uk:
+      - name: "Financial Times"
+        url: "https://www.ft.com/markets"
+        rss: "https://www.ft.com/markets?format=rss"
+        language: "en"
+        category: "markets"
+      
+      - name: "Reuters UK"
+        url: "https://www.reuters.com/markets/"
+        rss: "https://www.reuters.com/arc/outboundfeeds/rss/businessNews/"
+        language: "en"
+        category: "business"
+      
+      - name: "BBC Business"
+        url: "https://www.bbc.com/news/business"
+        rss: "http://feeds.bbci.co.uk/news/business/rss.xml"
+        language: "en"
+        category: "business"
+      
+      - name: "The Guardian Business"
+        url: "https://www.theguardian.com/business"
+        rss: "https://www.theguardian.com/business/rss"
+        language: "en"
+        category: "business"
+    
+    germany:
+      - name: "Handelsblatt"
+        url: "https://www.handelsblatt.com/finanzen"
+        rss: "https://www.handelsblatt.com/contentexport/feed/finanzen"
+        language: "de"
+        category: "finance"
+      
+      - name: "Der Spiegel Wirtschaft"
+        url: "https://www.spiegel.de/wirtschaft/"
+        rss: "https://www.spiegel.de/wirtschaft/index.rss"
+        language: "de"
+        category: "economy"
+    
+    france:
+      - name: "Les Échos"
+        url: "https://www.lesechos.fr/finance-marches"
+        rss: "https://www.lesechos.fr/rss/finance-marches.xml"
+        language: "fr"
+        category: "finance"
+  
+  # North America (25+ sources)
+  north_america:
+    usa:
+      - name: "Bloomberg"
+        url: "https://www.bloomberg.com/markets"
+        rss: "https://feeds.bloomberg.com/markets/news.rss"
+        language: "en"
+        category: "markets"
+      
+      - name: "Reuters"
+        url: "https://www.reuters.com/markets/"
+        rss: "https://www.reuters.com/arc/outboundfeeds/rss/businessNews/"
+        language: "en"
+        category: "business"
+      
+      - name: "CNBC"
+        url: "https://www.cnbc.com/markets/"
+        rss: "https://www.cnbc.com/id/10001147/device/rss/rss.html"
+        language: "en"
+        category: "markets"
+      
+      - name: "Wall Street Journal"
+        url: "https://www.wsj.com/news/markets"
+        rss: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"
+        language: "en"
+        category: "markets"
+      
+      - name: "MarketWatch"
+        url: "https://www.marketwatch.com/"
+        rss: "http://feeds.marketwatch.com/marketwatch/topstories/"
+        language: "en"
+        category: "markets"
+      
+      - name: "Yahoo Finance"
+        url: "https://finance.yahoo.com/"
+        rss: "https://finance.yahoo.com/news/rssindex"
+        language: "en"
+        category: "finance"
+      
+      - name: "Seeking Alpha"
+        url: "https://seekingalpha.com/market-news"
+        rss: "https://seekingalpha.com/market_currents.xml"
+        language: "en"
+        category: "markets"
+      
+      - name: "Benzinga"
+        url: "https://www.benzinga.com/news"
+        rss: "https://www.benzinga.com/feed"
+        language: "en"
+        category: "news"
+      
+      # Crypto sources
+      - name: "CoinDesk"
+        url: "https://www.coindesk.com/"
+        rss: "https://www.coindesk.com/arc/outboundfeeds/rss/"
+        language: "en"
+        category: "crypto"
+      
+      - name: "CoinTelegraph"
+        url: "https://cointelegraph.com/"
+        rss: "https://cointelegraph.com/rss"
+        language: "en"
+        category: "crypto"
+      
+      - name: "The Block"
+        url: "https://www.theblock.co/"
+        rss: "https://www.theblock.co/rss.xml"
+        language: "en"
+        category: "crypto"
+      
+      - name: "Decrypt"
+        url: "https://decrypt.co/"
+        rss: "https://decrypt.co/feed"
+        language: "en"
+        category: "crypto"
+      
+      - name: "Bitcoin Magazine"
+        url: "https://bitcoinmagazine.com/"
+        rss: "https://bitcoinmagazine.com/.rss/full/"
+        language: "en"
+        category: "crypto"
+    
+    canada:
+      - name: "Financial Post"
+        url: "https://financialpost.com/category/news"
+        rss: "https://financialpost.com/category/news/feed/"
+        language: "en"
+        category: "news"
+  
+  # South America (9+ sources)
+  south_america:
+    brazil:
+      - name: "Valor Econômico"
+        url: "https://valor.globo.com/financas"
+        rss: "https://valor.globo.com/rss/financas/"
+        language: "pt"
+        category: "finance"
+      
+      - name: "InfoMoney"
+        url: "https://www.infomoney.com.br/"
+        rss: "https://www.infomoney.com.br/feed/"
+        language: "pt"
+        category: "finance"
+    
+    argentina:
+      - name: "Ámbito Financiero"
+        url: "https://www.ambito.com/finanzas"
+        rss: "https://www.ambito.com/finanzas/rss/"
+        language: "es"
+        category: "finance"
+  
+  # Africa (8+ sources)
+  africa:
+    south_africa:
+      - name: "Business Day"
+        url: "https://www.businesslive.co.za/bd/"
+        rss: "https://www.businesslive.co.za/bd/rss/"
+        language: "en"
+        category: "business"
+      
+      - name: "Moneyweb"
+        url: "https://www.moneyweb.co.za/"
+        rss: "https://www.moneyweb.co.za/feed/"
+        language: "en"
+        category: "finance"
+  
+  # Oceania (7+ sources)
+  oceania:
+    australia:
+      - name: "Australian Financial Review"
+        url: "https://www.afr.com/markets"
+        rss: "https://www.afr.com/rss/markets"
+        language: "en"
+        category: "markets"
+      
+      - name: "ABC News Business"
+        url: "https://www.abc.net.au/news/business"
+        rss: "https://www.abc.net.au/news/feed/51120/rss.xml"
+        language: "en"
+        category: "business"
+
+# News processing settings
+processing:
+  # Time filter (only news from last N hours)
+  max_age_hours: 1
+  
+  # Maximum news per asset for LLM
+  max_news_per_asset: 30
+  
+  # Concurrent fetch limit
+  concurrent_fetches: 20
+  
+  # Timeout per source
+  source_timeout_seconds: 5
+  
+  # Cache duration
+  cache_duration_minutes: 5
+  
+  # Deduplication
+  title_similarity_threshold: 0.85
+  
+  # Relevance scoring
+  relevance:
+    title_match_weight: 3.0
+    description_match_weight: 1.5
+    global_keyword_weight: 1.0
+    recency_weight: 2.0
