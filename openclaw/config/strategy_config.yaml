@@ -1,0 +1,19 @@
+strategies:
+  - name: "Trend Following"
+    enabled: true
+    parameters:
+      ma_short: 20
+      ma_long: 50
+      
+  - name: "Mean Reversion"
+    enabled: true
+    parameters:
+      bb_period: 20
+      bb_std: 2
+      
+  - name: "Momentum"
+    enabled: true
+    parameters:
+      rsi_period: 14
+      rsi_oversold: 30
+      rsi_overbought: 70

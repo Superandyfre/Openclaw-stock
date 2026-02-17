@@ -1,0 +1,44 @@
+yahoo_finance:
+  rate_limit: 2000
+  stocks:
+    - AAPL
+    - MSFT
+    - GOOGL
+    - AMZN
+    - TSLA
+    - NVDA
+    - META
+    - NFLX
+    - AMD
+    - INTC
+
+upbit:
+  websocket_url: "wss://api.upbit.com/websocket/v1"
+  cryptocurrencies:
+    - KRW-BTC
+    - KRW-ETH
+    - KRW-XRP
+    - KRW-ADA
+    - KRW-SOL
+    - KRW-DOGE
+    - KRW-MATIC
+    - KRW-DOT
+    - KRW-AVAX
+    - KRW-LINK
+    - KRW-ATOM
+    - KRW-UNI
+    - KRW-ALGO
+    - KRW-VET
+    - KRW-ICP
+
+naver:
+  client_id: ""
+  client_secret: ""
+  daily_limit: 20
+
+cryptopanic:
+  api_key: ""
+
+dart:
+  api_key: ""
+  check_interval: 3600
