@@ -1,5 +1,6 @@
 """
 Technical analysis indicators
+Supports both long-term and short-term timeframes
 """
 import numpy as np
 from typing import List, Dict, Any, Tuple
@@ -8,6 +9,154 @@ from loguru import logger
 
 class TechnicalAnalysis:
     """Technical indicators calculator"""
+    
+    # === SHORT-TERM INDICATORS ===
+    
+    @staticmethod
+    def calculate_fast_rsi(prices: List[float], period: int = 5) -> float:
+        """
+        Calculate Fast RSI for short-term trading (5 period)
+        
+        Args:
+            prices: List of prices
+            period: Period for RSI calculation (default 5 for short-term)
+        
+        Returns:
+            RSI value (0-100)
+        """
+        return TechnicalAnalysis.calculate_rsi(prices, period)
+    
+    @staticmethod
+    def calculate_fast_macd(
+        prices: List[float],
+        fast_period: int = 5,
+        slow_period: int = 10,
+        signal_period: int = 5
+    ) -> Dict[str, Any]:
+        """
+        Calculate Fast MACD for short-term trading (5,10,5)
+        
+        Args:
+            prices: List of prices
+            fast_period: Fast EMA period (default 5)
+            slow_period: Slow EMA period (default 10)
+            signal_period: Signal line period (default 5)
+        
+        Returns:
+            MACD values
+        """
+        return TechnicalAnalysis.calculate_macd(prices, fast_period, slow_period, signal_period)
+    
+    @staticmethod
+    def detect_intraday_high_low(
+        prices: List[float],
+        current_price: float,
+        threshold: float = 0.005
+    ) -> Dict[str, Any]:
+        """
+        Detect if current price is near intraday high or low
+        
+        Args:
+            prices: Intraday price data
+            current_price: Current price
+            threshold: Threshold for proximity (default 0.5%)
+        
+        Returns:
+            High/low detection results
+        """
+        if not prices:
+            return {
+                "near_high": False,
+                "near_low": False,
+                "intraday_high": 0,
+                "intraday_low": 0
+            }
+        
+        intraday_high = max(prices)
+        intraday_low = min(prices)
+        
+        near_high = current_price >= intraday_high * (1 - threshold)
+        near_low = current_price <= intraday_low * (1 + threshold)
+        
+        return {
+            "near_high": near_high,
+            "near_low": near_low,
+            "intraday_high": intraday_high,
+            "intraday_low": intraday_low,
+            "distance_from_high_pct": (intraday_high - current_price) / intraday_high * 100,
+            "distance_from_low_pct": (current_price - intraday_low) / intraday_low * 100
+        }
+    
+    @staticmethod
+    def detect_volume_anomaly(
+        current_volume: float,
+        historical_volumes: List[float],
+        threshold: float = 2.5
+    ) -> Dict[str, Any]:
+        """
+        Detect volume anomalies (spikes)
+        
+        Args:
+            current_volume: Current volume
+            historical_volumes: Historical volume data
+            threshold: Multiplier threshold for anomaly (default 2.5x)
+        
+        Returns:
+            Volume anomaly detection results
+        """
+        if not historical_volumes:
+            return {
+                "is_anomaly": False,
+                "volume_ratio": 1.0,
+                "avg_volume": current_volume
+            }
+        
+        avg_volume = np.mean(historical_volumes)
+        volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
+        
+        is_anomaly = volume_ratio >= threshold
+        
+        return {
+            "is_anomaly": is_anomaly,
+            "volume_ratio": float(volume_ratio),
+            "avg_volume": float(avg_volume),
+            "current_volume": current_volume,
+            "threshold": threshold
+        }
+    
+    @staticmethod
+    def calculate_minute_mas(prices: List[float]) -> Dict[str, float]:
+        """
+        Calculate minute-level moving averages (5, 10, 15, 30)
+        
+        Args:
+            prices: List of minute prices
+        
+        Returns:
+            Dictionary of minute MAs
+        """
+        result = {
+            "ma_5": 0.0,
+            "ma_10": 0.0,
+            "ma_15": 0.0,
+            "ma_30": 0.0
+        }
+        
+        if len(prices) >= 5:
+            result["ma_5"] = float(np.mean(prices[-5:]))
+        
+        if len(prices) >= 10:
+            result["ma_10"] = float(np.mean(prices[-10:]))
+        
+        if len(prices) >= 15:
+            result["ma_15"] = float(np.mean(prices[-15:]))
+        
+        if len(prices) >= 30:
+            result["ma_30"] = float(np.mean(prices[-30:]))
+        
+        return result
+    
+    # === ORIGINAL INDICATORS ===
     
     @staticmethod
     def calculate_ma(prices: List[float], period: int) -> List[float]:
