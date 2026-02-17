@@ -1,6 +1,7 @@
 # Short-term trading risk management
 risk_management:
-  max_position_size: 0.2          # 20% max per position (higher for short-term)
+  max_position_size: 0.15         # 15% max per position (conservative for short-term)
+                                  # ⚠️ Can increase to 0.2 (20%) for experienced traders
   max_loss_per_trade: 0.02        # 2% max loss per trade
   max_daily_loss: 0.03            # 3% max daily loss (tighter for short-term)
   max_drawdown: 0.10              # 10% max drawdown (tighter)

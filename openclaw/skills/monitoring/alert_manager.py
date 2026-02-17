@@ -189,7 +189,14 @@ class AlertManager:
         """
         action = signal.get('action', 'HOLD')
         strategy = signal.get('strategy', 'Unknown')
-        confidence = signal.get('confidence', 0) * 10
+        # Ensure confidence is in 0-1 range, then scale to 1-10
+        confidence = signal.get('confidence', 0)
+        if confidence > 1:
+            # Already on 1-10 scale
+            confidence_score = min(10, max(0, confidence))
+        else:
+            # On 0-1 scale, convert to 1-10
+            confidence_score = confidence * 10
         
         emoji_map = {
             'BUY': '🔥',
@@ -205,11 +212,21 @@ class AlertManager:
         alert += f"**Entry Price**: ${signal.get('price', 0):.2f}\n"
         
         if action == 'BUY':
-            alert += f"**Stop Loss**: ${signal.get('stop_loss', 0):.2f} (-{((signal.get('price', 0) - signal.get('stop_loss', 0)) / signal.get('price', 0) * 100):.1f}%)\n"
-            alert += f"**Take Profit**: ${signal.get('take_profit', 0):.2f} (+{((signal.get('take_profit', 0) - signal.get('price', 0)) / signal.get('price', 0) * 100):.1f}%)\n"
+            price = signal.get('price', 0)
+            stop_loss = signal.get('stop_loss', 0)
+            take_profit = signal.get('take_profit', 0)
+            
+            # Calculate percentages safely
+            if price > 0:
+                stop_loss_pct = ((price - stop_loss) / price * 100) if stop_loss > 0 else 0
+                take_profit_pct = ((take_profit - price) / price * 100) if take_profit > 0 else 0
+                
+                alert += f"**Stop Loss**: ${stop_loss:.2f} (-{stop_loss_pct:.1f}%)\n"
+                alert += f"**Take Profit**: ${take_profit:.2f} (+{take_profit_pct:.1f}%)\n"
+            
             alert += f"**Expected Hold**: {signal.get('max_hold_hours', 6)} hours\n"
         
-        alert += f"**Confidence**: {confidence:.0f}/10\n\n"
+        alert += f"**Confidence**: {confidence_score:.0f}/10\n\n"
         alert += f"**Reason**: {signal.get('reason', 'N/A')}\n\n"
         alert += f"⚡ _Quick decision required - short-term opportunity!_"
         

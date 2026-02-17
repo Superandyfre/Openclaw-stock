@@ -1,5 +1,7 @@
 # Trading mode: "long_term" or "short_term"
-trading_mode: "short_term"
+# ⚠️ WARNING: short_term mode uses 5-second monitoring and aggressive parameters
+# Start with long_term mode if you're new to automated trading
+trading_mode: "long_term"  # Default to safer long-term mode (change to "short_term" when ready)
 
 # Timeframes for short-term trading
 timeframes:

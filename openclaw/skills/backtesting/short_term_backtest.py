@@ -191,6 +191,11 @@ class ShortTermBacktest:
         
         self.closed_trades.append(trade_record)
         
+        # Limit memory usage for very long backtests
+        if len(self.closed_trades) > 10000:
+            logger.warning("Closed trades list exceeds 10000, keeping last 10000")
+            self.closed_trades = self.closed_trades[-10000:]
+        
         # Remove position
         del self.positions[symbol]
         
@@ -353,10 +358,17 @@ class ShortTermBacktest:
         
         hold_times = []
         for trade in self.closed_trades:
-            entry = datetime.fromisoformat(trade['entry_time'])
-            exit_time = datetime.fromisoformat(trade['exit_time'])
-            hours = (exit_time - entry).total_seconds() / 3600
-            hold_times.append(hours)
+            try:
+                entry = datetime.fromisoformat(trade['entry_time'])
+                exit_time = datetime.fromisoformat(trade['exit_time'])
+                hours = (exit_time - entry).total_seconds() / 3600
+                hold_times.append(hours)
+            except (ValueError, KeyError) as e:
+                logger.warning(f"Skipping trade with invalid timestamp: {e}")
+                continue
+        
+        if not hold_times:
+            return 0.0
         
         return float(np.mean(hold_times))
     

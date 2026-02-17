@@ -125,14 +125,18 @@ class OrderFlowAnalysis:
         large_orders = []
         
         for trade in recent_trades:
-            trade_time = trade.get('timestamp', datetime.now())
-            if isinstance(trade_time, str):
-                trade_time = datetime.fromisoformat(trade_time)
-            
-            trade_size_value = trade.get('size', 0) * trade.get('price', 0)
-            
-            if trade_time >= cutoff_time and trade_size_value >= self.large_order_threshold:
-                large_orders.append(trade)
+            try:
+                trade_time = trade.get('timestamp', datetime.now())
+                if isinstance(trade_time, str):
+                    trade_time = datetime.fromisoformat(trade_time)
+                
+                trade_size_value = trade.get('size', 0) * trade.get('price', 0)
+                
+                if trade_time >= cutoff_time and trade_size_value >= self.large_order_threshold:
+                    large_orders.append(trade)
+            except (ValueError, TypeError) as e:
+                logger.debug(f"Skipping trade with invalid timestamp or data: {e}")
+                continue
         
         # Categorize by side
         large_buy_orders = [o for o in large_orders if o.get('side') == 'buy']
