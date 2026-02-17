@@ -3,6 +3,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Security: Updated](https://img.shields.io/badge/security-updated-green.svg)](SECURITY.md)
 
 An advanced AI-powered automated trading system that supports both stocks and cryptocurrencies, featuring a unique architecture combining high-frequency monitoring with intelligent anomaly detection.
 
@@ -243,17 +244,29 @@ stop_loss = risk_mgr.calculate_stop_loss(entry_price=150.0)
 
 ## 🔒 Security & Safety
 
+### Security Measures
+
+All dependencies are regularly updated to patch known vulnerabilities. See [SECURITY.md](SECURITY.md) for details.
+
+**Recent Security Updates** (2026-02-17):
+- ✅ aiohttp 3.9.1 → 3.13.3 (Fixed zip bomb, DoS, directory traversal)
+- ✅ torch 2.1.2 → 2.6.0 (Fixed buffer overflow, use-after-free, RCE)
+- ✅ transformers 4.36.2 → 4.48.0 (Fixed deserialization attacks)
+
 ### Built-in Safety Features
 - **Dry Run Mode**: Default mode simulates trading without real execution
 - **Risk Limits**: Multiple layers of risk management
 - **Position Sizing**: Automatic calculation based on portfolio value
 - **Stop Loss**: Configurable stop-loss mechanisms
+- **Input Validation**: All external inputs validated
+- **Secure Defaults**: No hardcoded secrets, environment-based configuration
 
 ### Important Warnings
 ⚠️ **This system is for educational purposes only**
 ⚠️ **Always test thoroughly in dry-run mode before live trading**
 ⚠️ **Never invest more than you can afford to lose**
 ⚠️ **Past performance does not guarantee future results**
+⚠️ **Review [SECURITY.md](SECURITY.md) before deployment**
 
 ## 📚 Project Structure
 
