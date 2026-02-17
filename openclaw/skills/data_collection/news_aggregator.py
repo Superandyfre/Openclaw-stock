@@ -5,7 +5,7 @@ import asyncio
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from loguru import logger
-from utils.api_client import APIClient
+from ...utils.api_client import APIClient
 
 
 class NewsAggregator:

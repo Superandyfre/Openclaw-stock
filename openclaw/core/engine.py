@@ -14,23 +14,23 @@ from typing import Dict, List, Any
 from datetime import datetime
 from loguru import logger
 
-from core.scheduler import Scheduler
-from core.database import DatabaseManager
-from skills.data_collection import (
+from .scheduler import Scheduler
+from .database import DatabaseManager
+from ..skills.data_collection import (
     StockMonitor,
     CryptoMonitor,
     NewsAggregator,
     AnnouncementMonitor
 )
-from skills.analysis import (
+from ..skills.analysis import (
     AIModelManager,
     TechnicalAnalysis,
     SentimentAnalysis,
     RiskManagement,
     StrategyEngine
 )
-from skills.execution import OrderManager, PositionTracker
-from skills.monitoring import SystemMonitor, AlertManager, AlertLevel
+from ..skills.execution import OrderManager, PositionTracker
+from ..skills.monitoring import SystemMonitor, AlertManager, AlertLevel
 
 
 class OpenClawEngine:
@@ -379,7 +379,7 @@ class OpenClawEngine:
         
         if position_size > 0:
             # Create order (dry run mode)
-            from skills.execution import OrderType
+            from ..skills.execution import OrderType
             
             order = self.order_manager.create_order(
                 symbol=symbol,
