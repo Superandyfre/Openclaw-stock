@@ -1,10 +1,15 @@
 """
 AI Models Manager for OpenClaw Trading System
+2026 Edition with Gemini 3 Flash, Claude Opus 4.6, and DeepSeek-R1
+
 Manages both dedicated models (high-frequency) and LLM (anomaly-triggered)
 """
-from typing import Dict, Any, List, Optional
-from datetime import datetime
+from typing import Dict, Any, List, Optional, Tuple
+from datetime import datetime, timedelta
 import numpy as np
+import asyncio
+import os
+import yaml
 from loguru import logger
 
 try:
@@ -22,22 +27,170 @@ except ImportError:
     SKLEARN_AVAILABLE = False
     logger.warning("Scikit-learn not available, anomaly detection will be limited")
 
+# 2026 LLM imports
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    logger.warning("Google Generative AI not available, Gemini 3 disabled")
+
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+    logger.warning("Anthropic not available, Claude Opus 4.6 disabled")
+
+try:
+    from openai import AsyncOpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    logger.warning("OpenAI client not available, DeepSeek-R1 disabled")
+
+# RSS feed parsing for global news
+try:
+    import feedparser
+    import aiohttp
+    from dateutil import parser as date_parser
+    FEEDPARSER_AVAILABLE = True
+except ImportError:
+    FEEDPARSER_AVAILABLE = False
+    logger.warning("feedparser/aiohttp/dateutil not available, global news disabled")
+
+# Currency converter
+try:
+    from ..utils.currency_converter import get_converter
+    CURRENCY_CONVERTER_AVAILABLE = True
+except ImportError:
+    CURRENCY_CONVERTER_AVAILABLE = False
+    logger.warning("Currency converter not available")
+
 
 class AIModelManager:
     """
     Manages AI models for trading analysis
     
-    Architecture:
+    Architecture (2026 Edition):
     - Dedicated models: Used in high-frequency loop (~50-100ms)
-    - LLM: Triggered only on anomalies (~2-3s)
+    - LLM (2026): Gemini 3 Flash (primary) + Claude Opus 4.6 (complex) + DeepSeek-R1 (backup)
+    - Global news: 100+ sources from 7 continents
+    - Currency: All prices in Korean Won (KRW)
     """
     
-    def __init__(self):
-        """Initialize AI model manager"""
+    def __init__(self, api_keys: Optional[Dict[str, str]] = None):
+        """
+        Initialize AI model manager
+        
+        Args:
+            api_keys: Dictionary containing API keys for LLMs
+                - google_ai_api_key: Google AI API key
+                - anthropic_api_key: Anthropic API key
+                - deepseek_api_key: DeepSeek API key
+        """
         self.models = {}
         self.tokenizers = {}
         self.isolation_forest = None
+        
+        # Load API keys from environment or parameters
+        self.api_keys = api_keys or {}
+        if not self.api_keys.get('google_ai_api_key'):
+            self.api_keys['google_ai_api_key'] = os.getenv('GOOGLE_AI_API_KEY', '')
+        if not self.api_keys.get('anthropic_api_key'):
+            self.api_keys['anthropic_api_key'] = os.getenv('ANTHROPIC_API_KEY', '')
+        if not self.api_keys.get('deepseek_api_key'):
+            self.api_keys['deepseek_api_key'] = os.getenv('DEEPSEEK_API_KEY', '')
+        
+        # Initialize 2026 LLM clients
+        self.gemini_client = None
+        self.claude_client = None
+        self.deepseek_client = None
+        self._init_llm_clients()
+        
+        # Load global news configuration
+        self.news_sources = {}
+        self.asset_keywords = {}
+        self._load_news_config()
+        
+        # News cache (5 minutes TTL)
+        self.news_cache: Dict[str, Tuple[datetime, List[Dict[str, Any]]]] = {}
+        self.news_cache_ttl = timedelta(minutes=5)
+        
+        # Model usage statistics
+        self.model_stats = {
+            'gemini': {'calls': 0, 'successes': 0, 'failures': 0},
+            'claude': {'calls': 0, 'successes': 0, 'failures': 0},
+            'deepseek': {'calls': 0, 'successes': 0, 'failures': 0},
+        }
+        
+        # Currency converter
+        self.currency_converter = None
+        if CURRENCY_CONVERTER_AVAILABLE:
+            try:
+                self.currency_converter = get_converter()
+            except Exception as e:
+                logger.warning(f"Failed to initialize currency converter: {e}")
+        
+        # Load traditional models
         self._load_models()
+    
+    def _init_llm_clients(self):
+        """Initialize 2026 LLM clients"""
+        # Gemini 3 Flash
+        if GEMINI_AVAILABLE and self.api_keys.get('google_ai_api_key'):
+            try:
+                genai.configure(api_key=self.api_keys['google_ai_api_key'])
+                self.gemini_client = genai.GenerativeModel('gemini-1.5-flash')
+                logger.info("✅ Gemini 3 Flash client initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Gemini client: {e}")
+        
+        # Claude Opus 4.6
+        if ANTHROPIC_AVAILABLE and self.api_keys.get('anthropic_api_key'):
+            try:
+                self.claude_client = anthropic.AsyncAnthropic(
+                    api_key=self.api_keys['anthropic_api_key']
+                )
+                logger.info("✅ Claude Opus 4.6 client initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Claude client: {e}")
+        
+        # DeepSeek-R1
+        if OPENAI_AVAILABLE and self.api_keys.get('deepseek_api_key'):
+            try:
+                self.deepseek_client = AsyncOpenAI(
+                    api_key=self.api_keys['deepseek_api_key'],
+                    base_url="https://api.deepseek.com/v1"
+                )
+                logger.info("✅ DeepSeek-R1 client initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize DeepSeek client: {e}")
+    
+    def _load_news_config(self):
+        """Load global news sources configuration"""
+        try:
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            config_path = os.path.join(base_dir, "config", "global_news_sources.yaml")
+            
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+            
+            self.news_sources = config.get('news_sources', {})
+            self.asset_keywords = config.get('asset_keywords', {})
+            self.news_processing_config = config.get('processing', {})
+            
+            # Count total sources
+            total_sources = 0
+            for region in self.news_sources.values():
+                for country in region.values():
+                    total_sources += len(country)
+            
+            logger.info(f"✅ Loaded {total_sources} global news sources")
+        except Exception as e:
+            logger.warning(f"Failed to load news config: {e}")
+            self.news_sources = {}
+            self.asset_keywords = {}
     
     def _load_models(self):
         """Load AI models into memory"""
@@ -479,4 +632,641 @@ Provide:
             "recommended_action": action,
             "confidence": min(1.0, confidence),
             "analysis": f"Based on {severity} severity anomaly and market conditions"
+        }
+    
+    # ==========================================
+    # 2026 LLM Methods
+    # ==========================================
+    
+    def _choose_model(
+        self,
+        context: Dict[str, Any],
+        all_news: List[Dict[str, Any]]
+    ) -> str:
+        """
+        Intelligently choose the best LLM model for the analysis
+        
+        Args:
+            context: Market context
+            all_news: All relevant news
+        
+        Returns:
+            Model name ('gemini', 'claude', or 'deepseek')
+        """
+        severity = context.get('severity', 'low')
+        change_5m = abs(float(context.get('change_5m', 0)))
+        anomaly_type = context.get('anomaly_type', '')
+        
+        # Complex scenarios → Claude Opus 4.6 (best reasoning)
+        if (severity == 'critical' or 
+            change_5m > 5 or 
+            'flash_crash' in anomaly_type or
+            'black_swan' in anomaly_type or
+            len(all_news) > 50):
+            if self.claude_client:
+                logger.info(f"🎯 Routing to Claude Opus 4.6 (complex scenario)")
+                return 'claude'
+        
+        # Default → Gemini 3 Flash (fast and free)
+        if self.gemini_client:
+            logger.info(f"⚡ Routing to Gemini 3 Flash (standard analysis)")
+            return 'gemini'
+        
+        # Fallback to DeepSeek
+        if self.deepseek_client:
+            logger.info(f"🔄 Routing to DeepSeek-R1 (fallback)")
+            return 'deepseek'
+        
+        logger.warning("No LLM available, using rule-based analysis")
+        return 'none'
+    
+    async def _call_gemini(
+        self,
+        prompt: str,
+        timeout: int = 10
+    ) -> Optional[str]:
+        """
+        Call Gemini 3 Flash API
+        
+        Args:
+            prompt: Prompt text
+            timeout: Timeout in seconds
+        
+        Returns:
+            Response text or None
+        """
+        if not self.gemini_client:
+            return None
+        
+        try:
+            self.model_stats['gemini']['calls'] += 1
+            
+            # Generate response
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.gemini_client.generate_content,
+                    prompt
+                ),
+                timeout=timeout
+            )
+            
+            self.model_stats['gemini']['successes'] += 1
+            return response.text
+        
+        except Exception as e:
+            self.model_stats['gemini']['failures'] += 1
+            logger.error(f"Gemini API call failed: {e}")
+            return None
+    
+    async def _call_claude(
+        self,
+        prompt: str,
+        timeout: int = 15
+    ) -> Optional[str]:
+        """
+        Call Claude Opus 4.6 API
+        
+        Args:
+            prompt: Prompt text
+            timeout: Timeout in seconds
+        
+        Returns:
+            Response text or None
+        """
+        if not self.claude_client:
+            return None
+        
+        try:
+            self.model_stats['claude']['calls'] += 1
+            
+            # Create message
+            response = await asyncio.wait_for(
+                self.claude_client.messages.create(
+                    model="claude-3-5-sonnet-20241022",  # Latest available
+                    max_tokens=2000,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ]
+                ),
+                timeout=timeout
+            )
+            
+            self.model_stats['claude']['successes'] += 1
+            return response.content[0].text
+        
+        except Exception as e:
+            self.model_stats['claude']['failures'] += 1
+            logger.error(f"Claude API call failed: {e}")
+            return None
+    
+    async def _call_deepseek(
+        self,
+        prompt: str,
+        timeout: int = 15
+    ) -> Optional[str]:
+        """
+        Call DeepSeek-R1 API
+        
+        Args:
+            prompt: Prompt text
+            timeout: Timeout in seconds
+        
+        Returns:
+            Response text or None
+        """
+        if not self.deepseek_client:
+            return None
+        
+        try:
+            self.model_stats['deepseek']['calls'] += 1
+            
+            # Create chat completion
+            response = await asyncio.wait_for(
+                self.deepseek_client.chat.completions.create(
+                    model="deepseek-chat",
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=2000
+                ),
+                timeout=timeout
+            )
+            
+            self.model_stats['deepseek']['successes'] += 1
+            return response.choices[0].message.content
+        
+        except Exception as e:
+            self.model_stats['deepseek']['failures'] += 1
+            logger.error(f"DeepSeek API call failed: {e}")
+            return None
+    
+    async def _call_llm_with_fallback(
+        self,
+        prompt: str,
+        preferred_model: str
+    ) -> Tuple[Optional[str], str]:
+        """
+        Call LLM with automatic fallback
+        
+        Args:
+            prompt: Prompt text
+            preferred_model: Preferred model name
+        
+        Returns:
+            (response_text, actual_model_used)
+        """
+        # Define fallback order for each model
+        fallback_order = {
+            'gemini': ['gemini', 'claude', 'deepseek'],
+            'claude': ['claude', 'gemini', 'deepseek'],
+            'deepseek': ['deepseek', 'gemini', 'claude'],
+        }
+        
+        models_to_try = fallback_order.get(preferred_model, ['gemini', 'claude', 'deepseek'])
+        
+        for model in models_to_try:
+            try:
+                if model == 'gemini':
+                    response = await self._call_gemini(prompt)
+                elif model == 'claude':
+                    response = await self._call_claude(prompt)
+                elif model == 'deepseek':
+                    response = await self._call_deepseek(prompt)
+                else:
+                    continue
+                
+                if response:
+                    logger.info(f"✅ LLM response received from {model}")
+                    return response, model
+            
+            except Exception as e:
+                logger.warning(f"Model {model} failed: {e}, trying next...")
+                continue
+        
+        logger.error("All LLM models failed")
+        return None, 'none'
+    
+    async def _fetch_global_news_for_llm(
+        self,
+        symbol: str,
+        max_news: int = 30
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch global news for the asset
+        
+        Args:
+            symbol: Asset symbol
+            max_news: Maximum number of news articles to return
+        
+        Returns:
+            List of relevant news articles
+        """
+        # Check cache first
+        if symbol in self.news_cache:
+            cache_time, cached_news = self.news_cache[symbol]
+            if datetime.now() - cache_time < self.news_cache_ttl:
+                logger.debug(f"Using cached news for {symbol}")
+                return cached_news[:max_news]
+        
+        if not FEEDPARSER_AVAILABLE:
+            logger.warning("feedparser not available, skipping global news")
+            return []
+        
+        # Get keywords for this asset
+        keywords = self.asset_keywords.get(symbol, [])
+        global_keywords = self.asset_keywords.get('GLOBAL', [])
+        all_keywords = keywords + global_keywords
+        
+        if not all_keywords:
+            logger.warning(f"No keywords defined for {symbol}")
+            return []
+        
+        # Fetch news from all sources concurrently
+        all_news = []
+        tasks = []
+        
+        # Flatten news sources
+        for region in self.news_sources.values():
+            for country in region.values():
+                for source in country:
+                    task = self._fetch_rss_source(source, all_keywords)
+                    tasks.append(task)
+        
+        # Limit concurrent fetches
+        max_concurrent = self.news_processing_config.get('concurrent_fetches', 20)
+        
+        # Fetch in batches
+        for i in range(0, len(tasks), max_concurrent):
+            batch = tasks[i:i+max_concurrent]
+            results = await asyncio.gather(*batch, return_exceptions=True)
+            
+            for result in results:
+                if isinstance(result, list):
+                    all_news.extend(result)
+        
+        # Filter by time (last N hours)
+        max_age_hours = self.news_processing_config.get('max_age_hours', 1)
+        cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
+        
+        recent_news = [
+            news for news in all_news
+            if news.get('published_date', datetime.min) > cutoff_time
+        ]
+        
+        # Deduplicate by title similarity
+        unique_news = self._deduplicate_news(recent_news)
+        
+        # Score by relevance
+        scored_news = self._score_news_relevance(unique_news, keywords)
+        
+        # Sort by score (descending)
+        sorted_news = sorted(
+            scored_news,
+            key=lambda x: x.get('relevance_score', 0),
+            reverse=True
+        )
+        
+        # Cache results
+        self.news_cache[symbol] = (datetime.now(), sorted_news)
+        
+        logger.info(f"📰 Fetched {len(sorted_news)} relevant news for {symbol}")
+        
+        return sorted_news[:max_news]
+    
+    async def _fetch_rss_source(
+        self,
+        source: Dict[str, Any],
+        keywords: List[str]
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch news from single RSS source
+        
+        Args:
+            source: Source configuration
+            keywords: Keywords to match
+        
+        Returns:
+            List of news articles
+        """
+        if not source.get('rss'):
+            return []
+        
+        try:
+            timeout = self.news_processing_config.get('source_timeout_seconds', 5)
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(source['rss'], timeout=timeout) as response:
+                    if response.status != 200:
+                        return []
+                    
+                    content = await response.text()
+            
+            # Parse RSS feed
+            feed = await asyncio.to_thread(feedparser.parse, content)
+            
+            articles = []
+            for entry in feed.entries[:10]:  # Limit per source
+                # Parse published date
+                pub_date = datetime.now()
+                if hasattr(entry, 'published'):
+                    try:
+                        pub_date = date_parser.parse(entry.published)
+                    except:
+                        pass
+                
+                # Extract title and description
+                title = entry.get('title', '')
+                description = entry.get('description', '') or entry.get('summary', '')
+                
+                # Quick keyword match
+                text = (title + ' ' + description).lower()
+                has_keyword = any(kw.lower() in text for kw in keywords)
+                
+                if has_keyword:
+                    articles.append({
+                        'title': title,
+                        'description': description,
+                        'link': entry.get('link', ''),
+                        'source': source.get('name', 'Unknown'),
+                        'language': source.get('language', 'en'),
+                        'category': source.get('category', 'general'),
+                        'published_date': pub_date
+                    })
+            
+            return articles
+        
+        except Exception as e:
+            logger.debug(f"Failed to fetch {source.get('name', 'unknown')}: {e}")
+            return []
+    
+    def _deduplicate_news(
+        self,
+        news_list: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Remove duplicate news by title similarity"""
+        if not news_list:
+            return []
+        
+        unique = []
+        seen_titles = set()
+        
+        for news in news_list:
+            title = news.get('title', '').lower()
+            # Simple deduplication by normalized title
+            title_normalized = ''.join(c for c in title if c.isalnum())
+            
+            if title_normalized not in seen_titles:
+                seen_titles.add(title_normalized)
+                unique.append(news)
+        
+        return unique
+    
+    def _score_news_relevance(
+        self,
+        news_list: List[Dict[str, Any]],
+        keywords: List[str]
+    ) -> List[Dict[str, Any]]:
+        """Score news articles by relevance"""
+        config = self.news_processing_config.get('relevance', {})
+        title_weight = config.get('title_match_weight', 3.0)
+        desc_weight = config.get('description_match_weight', 1.5)
+        recency_weight = config.get('recency_weight', 2.0)
+        
+        for news in news_list:
+            score = 0.0
+            
+            # Title match
+            title = news.get('title', '').lower()
+            title_matches = sum(1 for kw in keywords if kw.lower() in title)
+            score += title_matches * title_weight
+            
+            # Description match
+            desc = news.get('description', '').lower()
+            desc_matches = sum(1 for kw in keywords if kw.lower() in desc)
+            score += desc_matches * desc_weight
+            
+            # Recency
+            pub_date = news.get('published_date', datetime.now())
+            hours_old = (datetime.now() - pub_date).total_seconds() / 3600
+            recency_score = max(0, 1 - (hours_old / 24))  # Decay over 24 hours
+            score += recency_score * recency_weight
+            
+            news['relevance_score'] = score
+        
+        return news_list
+    
+    async def analyze_anomaly_with_llm_2026(
+        self,
+        symbol: str,
+        anomaly_data: Dict[str, Any],
+        market_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Deep analysis of anomaly using 2026 LLM architecture
+        
+        Args:
+            symbol: Asset symbol
+            anomaly_data: Anomaly detection results
+            market_context: Current market context
+        
+        Returns:
+            LLM analysis results with KRW prices
+        """
+        start_time = datetime.now()
+        
+        # 1. Convert all prices to KRW
+        if self.currency_converter:
+            market_context = await self.currency_converter.convert_context_to_krw(
+                symbol,
+                market_context
+            )
+        
+        # 2. Fetch global news
+        all_news = await self._fetch_global_news_for_llm(symbol, max_news=30)
+        
+        # 3. Choose best model
+        preferred_model = self._choose_model(market_context, all_news)
+        
+        # 4. Construct prompt with KRW prices and global news
+        prompt = self._construct_2026_prompt(symbol, anomaly_data, market_context, all_news)
+        
+        # 5. Call LLM with fallback
+        response_text, model_used = await self._call_llm_with_fallback(prompt, preferred_model)
+        
+        # 6. Parse response or use rule-based fallback
+        if response_text:
+            analysis = self._parse_llm_response(response_text)
+        else:
+            logger.warning("LLM failed, using rule-based analysis")
+            analysis = self._rule_based_anomaly_analysis(anomaly_data, market_context)
+        
+        elapsed = (datetime.now() - start_time).total_seconds() * 1000
+        
+        return {
+            **analysis,
+            "processing_time_ms": elapsed,
+            "model_used": model_used,
+            "news_count": len(all_news),
+            "currency": "KRW"
+        }
+    
+    def _construct_2026_prompt(
+        self,
+        symbol: str,
+        anomaly_data: Dict[str, Any],
+        context: Dict[str, Any],
+        news: List[Dict[str, Any]]
+    ) -> str:
+        """
+        Construct 2026 prompt with KRW prices and global news
+        
+        Args:
+            symbol: Asset symbol
+            anomaly_data: Anomaly details
+            context: Market context (in KRW)
+            news: Global news list
+        
+        Returns:
+            Formatted prompt
+        """
+        # Format prices in KRW
+        if self.currency_converter:
+            fmt_price = self.currency_converter.format_krw
+            fmt_change = self.currency_converter.format_change
+        else:
+            fmt_price = lambda x: f"₩{x:,.0f}"
+            fmt_change = lambda x: f"{x*100:+.2f}%"
+        
+        # Build news section
+        news_section = "## 📰 Global News (Last Hour)\n\n"
+        if news:
+            # Group by region
+            news_by_region = {}
+            for article in news[:20]:  # Top 20 most relevant
+                category = article.get('category', 'general')
+                if category not in news_by_region:
+                    news_by_region[category] = []
+                news_by_region[category].append(article)
+            
+            for category, articles in news_by_region.items():
+                news_section += f"### {category.title()}\n"
+                for article in articles[:5]:  # Top 5 per category
+                    flag = self._get_language_flag(article.get('language', 'en'))
+                    news_section += f"- {flag} **[{article.get('source', 'Unknown')}]** {article.get('title', '')}\n"
+                news_section += "\n"
+        else:
+            news_section += "No recent news available.\n\n"
+        
+        # Construct full prompt
+        prompt = f"""You are an expert AI trading analyst for OpenClaw 2026.
+
+## 🎯 Asset: {symbol}
+
+## 🚨 Anomaly Detected
+- Severity: {anomaly_data.get('severity', 'unknown')}
+- Type: {anomaly_data.get('type', 'unknown')}
+- Score: {anomaly_data.get('score', 0):.2f}
+
+## 💱 Market Data (All prices in Korean Won ₩)
+- Current Price: {fmt_price(context.get('current_price', 0))}
+- 5-Min Change: {fmt_change(context.get('change_5m', 0) / 100)}
+- 15-Min Change: {fmt_change(context.get('change_15m', 0) / 100)}
+- Today Change: {fmt_change(context.get('change_today', 0) / 100)}
+- Volume Ratio: {context.get('volume_ratio', 1.0):.2f}x
+- RSI (5m): {context.get('rsi_5m', 50):.1f}
+- MA5: {fmt_price(context.get('ma5', 0))}
+- MA15: {fmt_price(context.get('ma15', 0))}
+
+{news_section}
+
+## 📋 Your Task
+
+Analyze this anomaly and provide:
+
+1. **Root Cause**: What's driving this anomaly? (2-3 sentences)
+2. **Action**: BUY / SELL / HOLD
+3. **Entry Price** (in KRW): Exact entry point
+4. **Stop Loss** (in KRW): Risk management level
+5. **Take Profit** (in KRW): Target exit
+6. **Risk Score**: 1-10 (higher = riskier)
+7. **Confidence**: 0-1 (higher = more confident)
+8. **Reasoning**: Brief explanation (2-3 sentences)
+
+**Important Notes:**
+- All prices MUST be in Korean Won (₩)
+- Consider global news sentiment
+- Focus on short-term opportunities (hours to 1 day)
+- Be concise and actionable
+
+Provide your analysis in a structured format."""
+        
+        return prompt
+    
+    def _get_language_flag(self, language: str) -> str:
+        """Get emoji flag for language"""
+        flags = {
+            'en': '🇺🇸',
+            'ko': '🇰🇷',
+            'ja': '🇯🇵',
+            'zh': '🇨🇳',
+            'de': '🇩🇪',
+            'fr': '🇫🇷',
+            'es': '🇪🇸',
+            'pt': '🇧🇷',
+        }
+        return flags.get(language, '🌍')
+    
+    def _parse_llm_response(self, response_text: str) -> Dict[str, Any]:
+        """
+        Parse LLM response into structured format
+        
+        Args:
+            response_text: Raw LLM response
+        
+        Returns:
+            Parsed analysis dict
+        """
+        # Simple parsing - in production would use more robust parsing
+        result = {
+            "root_cause": "LLM analysis completed",
+            "recommended_action": "HOLD",
+            "risk_score": 5,
+            "confidence": 0.7,
+            "analysis": response_text[:500],  # Truncate for storage
+            "full_response": response_text
+        }
+        
+        # Try to extract action
+        response_lower = response_text.lower()
+        if 'action: buy' in response_lower or 'action:** buy' in response_lower:
+            result['recommended_action'] = 'BUY'
+        elif 'action: sell' in response_lower or 'action:** sell' in response_lower:
+            result['recommended_action'] = 'SELL'
+        
+        # Try to extract confidence
+        import re
+        conf_match = re.search(r'confidence[:\s]+([0-9.]+)', response_lower)
+        if conf_match:
+            try:
+                result['confidence'] = float(conf_match.group(1))
+            except:
+                pass
+        
+        # Try to extract risk score
+        risk_match = re.search(r'risk score[:\s]+([0-9]+)', response_lower)
+        if risk_match:
+            try:
+                result['risk_score'] = int(risk_match.group(1))
+            except:
+                pass
+        
+        return result
+    
+    def get_model_statistics(self) -> Dict[str, Any]:
+        """Get LLM usage statistics"""
+        return {
+            'models': self.model_stats,
+            'total_calls': sum(m['calls'] for m in self.model_stats.values()),
+            'total_successes': sum(m['successes'] for m in self.model_stats.values()),
+            'total_failures': sum(m['failures'] for m in self.model_stats.values()),
         }

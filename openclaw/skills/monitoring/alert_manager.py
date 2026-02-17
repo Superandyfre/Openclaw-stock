@@ -1,11 +1,19 @@
 """
 Alert manager for notifications
+2026 Edition with KRW currency support
 """
 import asyncio
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 from enum import Enum
 from loguru import logger
+
+try:
+    from ..utils.currency_converter import get_converter
+    CURRENCY_CONVERTER_AVAILABLE = True
+except ImportError:
+    CURRENCY_CONVERTER_AVAILABLE = False
+    logger.warning("Currency converter not available")
 
 
 class AlertLevel(Enum):
@@ -16,7 +24,7 @@ class AlertLevel(Enum):
 
 
 class AlertManager:
-    """Manages alerts and notifications"""
+    """Manages alerts and notifications with KRW currency support"""
     
     def __init__(
         self,
@@ -36,6 +44,14 @@ class AlertManager:
         self.telegram_chat_id = telegram_chat_id
         self.email_enabled = email_enabled
         self.alerts: List[Dict[str, Any]] = []
+        
+        # Currency converter for KRW formatting
+        self.currency_converter = None
+        if CURRENCY_CONVERTER_AVAILABLE:
+            try:
+                self.currency_converter = get_converter()
+            except Exception as e:
+                logger.warning(f"Failed to initialize currency converter: {e}")
     
     async def send_alert(
         self,
@@ -120,7 +136,7 @@ class AlertManager:
         market_summary: Dict[str, Any]
     ) -> str:
         """
-        Generate formatted report
+        Generate formatted report with KRW currency
         
         Args:
             portfolio_metrics: Portfolio performance metrics
@@ -129,15 +145,23 @@ class AlertManager:
         Returns:
             Formatted report text
         """
+        # Helper functions for formatting
+        fmt_krw = self._format_krw
+        fmt_pct = self._format_percentage
+        
         report = "📊 **OpenClaw Trading Report**\n\n"
         
         # Portfolio section
-        report += "**Portfolio Performance:**\n"
-        report += f"- Portfolio Value: ${portfolio_metrics.get('portfolio_value', 0):,.2f}\n"
-        report += f"- Total Return: ${portfolio_metrics.get('total_return', 0):,.2f} ({portfolio_metrics.get('total_return_pct', 0):.2f}%)\n"
-        report += f"- Realized P&L: ${portfolio_metrics.get('realized_pnl', 0):,.2f}\n"
-        report += f"- Unrealized P&L: ${portfolio_metrics.get('unrealized_pnl', 0):,.2f}\n"
-        report += f"- Cash: ${portfolio_metrics.get('cash', 0):,.2f}\n"
+        report += "**Portfolio Performance (₩ Korean Won):**\n"
+        report += f"- Portfolio Value: {fmt_krw(portfolio_metrics.get('portfolio_value', 0))}\n"
+        
+        total_return = portfolio_metrics.get('total_return', 0)
+        total_return_pct = portfolio_metrics.get('total_return_pct', 0)
+        report += f"- Total Return: {fmt_krw(total_return)} ({fmt_pct(total_return_pct)})\n"
+        
+        report += f"- Realized P&L: {fmt_krw(portfolio_metrics.get('realized_pnl', 0))}\n"
+        report += f"- Unrealized P&L: {fmt_krw(portfolio_metrics.get('unrealized_pnl', 0))}\n"
+        report += f"- Cash: {fmt_krw(portfolio_metrics.get('cash', 0))}\n"
         report += f"- Open Positions: {portfolio_metrics.get('num_positions', 0)}\n"
         report += f"- Win Rate: {portfolio_metrics.get('win_rate', 0):.1f}%\n"
         report += f"- Sharpe Ratio: {portfolio_metrics.get('sharpe_ratio', 0):.2f}\n"
@@ -172,13 +196,13 @@ class AlertManager:
         
         return alerts[-count:]
     
-    def generate_short_term_signal_alert(
+    async def generate_short_term_signal_alert(
         self,
         symbol: str,
         signal: Dict[str, Any]
     ) -> str:
         """
-        Generate short-term trading signal alert
+        Generate short-term trading signal alert with KRW prices
         
         Args:
             symbol: Asset symbol
@@ -189,6 +213,7 @@ class AlertManager:
         """
         action = signal.get('action', 'HOLD')
         strategy = signal.get('strategy', 'Unknown')
+        
         # Ensure confidence is in 0-1 range, then scale to 1-10
         confidence = signal.get('confidence', 0)
         if confidence > 1:
@@ -206,23 +231,28 @@ class AlertManager:
         
         emoji = emoji_map.get(action, '📊')
         
+        # Convert prices to KRW
+        price = await self._convert_price(symbol, signal.get('price', 0))
+        stop_loss = await self._convert_price(symbol, signal.get('stop_loss', 0))
+        take_profit = await self._convert_price(symbol, signal.get('take_profit', 0))
+        
+        # Format prices
+        fmt_krw = self._format_krw
+        fmt_pct = self._format_percentage
+        
         alert = f"{emoji} **SHORT-TERM OPPORTUNITY: {symbol}**\n\n"
         alert += f"**Strategy**: {strategy}\n"
         alert += f"**Action**: {action}\n"
-        alert += f"**Entry Price**: ${signal.get('price', 0):.2f}\n"
+        alert += f"**Entry Price**: {fmt_krw(price)}\n"
         
         if action == 'BUY':
-            price = signal.get('price', 0)
-            stop_loss = signal.get('stop_loss', 0)
-            take_profit = signal.get('take_profit', 0)
-            
             # Calculate percentages safely
             if price > 0:
-                stop_loss_pct = ((price - stop_loss) / price * 100) if stop_loss > 0 else 0
-                take_profit_pct = ((take_profit - price) / price * 100) if take_profit > 0 else 0
+                stop_loss_pct = ((price - stop_loss) / price) if stop_loss > 0 else 0
+                take_profit_pct = ((take_profit - price) / price) if take_profit > 0 else 0
                 
-                alert += f"**Stop Loss**: ${stop_loss:.2f} (-{stop_loss_pct:.1f}%)\n"
-                alert += f"**Take Profit**: ${take_profit:.2f} (+{take_profit_pct:.1f}%)\n"
+                alert += f"**Stop Loss**: {fmt_krw(stop_loss)} ({fmt_pct(-stop_loss_pct)})\n"
+                alert += f"**Take Profit**: {fmt_krw(take_profit)} ({fmt_pct(take_profit_pct)})\n"
             
             alert += f"**Expected Hold**: {signal.get('max_hold_hours', 6)} hours\n"
         
@@ -232,14 +262,14 @@ class AlertManager:
         
         return alert
     
-    def generate_position_alert(
+    async def generate_position_alert(
         self,
         symbol: str,
         position_type: str,
         details: Dict[str, Any]
     ) -> str:
         """
-        Generate position management alert (stop hit, take profit, time limit)
+        Generate position management alert with KRW prices
         
         Args:
             symbol: Asset symbol
@@ -258,26 +288,66 @@ class AlertManager:
         
         emoji = emoji_map.get(position_type, '📊')
         
+        # Convert prices to KRW
+        entry_price = await self._convert_price(symbol, details.get('entry_price', 0))
+        exit_price = await self._convert_price(symbol, details.get('exit_price', 0))
+        pnl = await self._convert_price(symbol, details.get('pnl', 0))
+        
+        # Format prices
+        fmt_krw = self._format_krw
+        fmt_pct = self._format_percentage
+        
         alert = f"{emoji} **POSITION UPDATE: {symbol}**\n\n"
+        
+        pnl_pct = details.get('pnl_pct', 0) / 100  # Convert to decimal
         
         if position_type == 'stop_loss':
             alert += "**Stop Loss Hit**\n"
-            alert += f"Entry: ${details.get('entry_price', 0):.2f}\n"
-            alert += f"Exit: ${details.get('exit_price', 0):.2f}\n"
-            alert += f"Loss: ${details.get('pnl', 0):.2f} ({details.get('pnl_pct', 0):.2f}%)\n"
+            alert += f"Entry: {fmt_krw(entry_price)}\n"
+            alert += f"Exit: {fmt_krw(exit_price)}\n"
+            alert += f"Loss: {fmt_krw(pnl)} ({fmt_pct(pnl_pct)})\n"
         
         elif position_type == 'take_profit':
             alert += "**Take Profit Target Hit!**\n"
-            alert += f"Entry: ${details.get('entry_price', 0):.2f}\n"
-            alert += f"Exit: ${details.get('exit_price', 0):.2f}\n"
-            alert += f"Profit: ${details.get('pnl', 0):.2f} (+{details.get('pnl_pct', 0):.2f}%)\n"
+            alert += f"Entry: {fmt_krw(entry_price)}\n"
+            alert += f"Exit: {fmt_krw(exit_price)}\n"
+            alert += f"Profit: {fmt_krw(pnl)} ({fmt_pct(pnl_pct)})\n"
         
         elif position_type == 'time_limit':
             alert += "**Time Limit Reached**\n"
             alert += f"Held for: {details.get('hours_held', 0):.1f} hours\n"
-            alert += f"Current P&L: ${details.get('pnl', 0):.2f} ({details.get('pnl_pct', 0):.2f}%)\n"
+            alert += f"Current P&L: {fmt_krw(pnl)} ({fmt_pct(pnl_pct)})\n"
             alert += "Position closed automatically.\n"
         
         alert += f"\n_Position closed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_"
         
         return alert
+    
+    # Helper methods for KRW formatting
+    
+    async def _convert_price(self, symbol: str, price: float) -> float:
+        """Convert price to KRW"""
+        if self.currency_converter:
+            try:
+                return await self.currency_converter.convert_price(symbol, price)
+            except Exception as e:
+                logger.warning(f"Price conversion failed: {e}")
+        return price
+    
+    def _format_krw(self, amount: float) -> str:
+        """Format amount as KRW"""
+        if self.currency_converter:
+            return self.currency_converter.format_krw(amount)
+        return f"₩{amount:,.0f}"
+    
+    def _format_percentage(self, pct: float) -> str:
+        """Format percentage with sign"""
+        if self.currency_converter:
+            return self.currency_converter.format_change(pct)
+        
+        # Fallback formatting
+        pct_value = pct * 100
+        if pct >= 0:
+            return f"+{pct_value:.2f}%"
+        else:
+            return f"{pct_value:.2f}%"
