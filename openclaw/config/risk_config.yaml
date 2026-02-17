@@ -1,15 +1,41 @@
+# Short-term trading risk management
 risk_management:
-  max_position_size: 0.1
-  max_loss_per_trade: 0.02
-  max_daily_loss: 0.05
-  max_drawdown: 0.15
+  max_position_size: 0.2          # 20% max per position (higher for short-term)
+  max_loss_per_trade: 0.02        # 2% max loss per trade
+  max_daily_loss: 0.03            # 3% max daily loss (tighter for short-term)
+  max_drawdown: 0.10              # 10% max drawdown (tighter)
+  min_risk_reward_ratio: 2.0      # Minimum 2:1 reward:risk ratio
   
+# Short-term stop loss configuration
 stop_loss:
   enabled: true
-  type: "trailing"
-  percentage: 0.05
+  type: "trailing"                # Trailing stop loss
+  initial_percentage: 0.01        # 1% initial stop loss (tight)
+  trailing_step: 0.005            # Move stop up by 0.5% as profit increases
+  min_profit_for_trailing: 0.005  # Start trailing after 0.5% profit
   
+# Short-term take profit configuration
 take_profit:
   enabled: true
-  type: "fixed"
-  percentage: 0.10
+  type: "tiered"                  # Tiered take profit
+  quick_profit: 0.015             # 1.5% - First target (sell 33%)
+  main_profit: 0.025              # 2.5% - Second target (sell 33%)
+  max_profit: 0.05                # 5% - Final target (sell remaining)
+  
+# Intraday trading limits
+intraday_limits:
+  max_trades_per_day: 5           # Maximum 5 trades per day
+  max_consecutive_losses: 3       # Stop after 3 consecutive losses
+  force_close_before_market_close: true  # Close all positions before market close
+  min_time_between_trades_minutes: 30    # Wait 30 min between trades
+  
+# Position time limits
+position_time_limits:
+  max_hold_time_hours: 24         # Maximum 24 hours hold (1 day)
+  default_hold_time_hours: 6      # Default target: 6 hours
+  auto_close_on_time_limit: true  # Automatically close on time limit
+  
+# Portfolio heat management (total risk exposure)
+portfolio_heat:
+  max_total_risk: 0.06            # Maximum 6% total portfolio risk
+  max_concurrent_positions: 3     # Maximum 3 positions simultaneously
