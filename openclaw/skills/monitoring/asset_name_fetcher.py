@@ -135,6 +135,9 @@ class AssetNameFetcher:
         """
         Fetch cryptocurrency list from CoinGecko
         
+        Uses in-memory caching to reduce API calls. Returns empty
+        dictionary on API failure.
+        
         Returns:
             Dictionary mapping symbol to name
         """
@@ -227,8 +230,8 @@ class AssetNameFetcher:
         
         # Default fallback
         if not name:
-            name = f"Unknown Asset ({symbol})"
-            logger.warning(f"Could not fetch name for {symbol}, using default")
+            name = f"Unknown Asset ({symbol}). Please verify the symbol format."
+            logger.warning(f"Could not fetch name for {symbol}, using default. Symbol format may be incorrect.")
         
         # Cache the result
         self.db.set(cache_key, name, expiry=self.CACHE_TTL)

@@ -604,14 +604,19 @@ Format as a clear, readable message for Telegram.
                 quantity = float(numbers[0])
                 price = float(numbers[1])
                 
+                # Create a simple context object with args attribute
+                class SimpleContext:
+                    def __init__(self, args):
+                        self.args = args
+                
+                context = SimpleContext([symbol, str(quantity), str(price)])
+                
                 if action == 'buy':
-                    context_obj = type('obj', (object,), {'args': [symbol, str(quantity), str(price)]})()
                     update.message.text = f"/buy {symbol} {quantity} {price}"
-                    await self._cmd_buy(update, context_obj)
+                    await self._cmd_buy(update, context)
                 else:
-                    context_obj = type('obj', (object,), {'args': [symbol, str(quantity), str(price)]})()
                     update.message.text = f"/sell {symbol} {quantity} {price}"
-                    await self._cmd_sell(update, context_obj)
+                    await self._cmd_sell(update, context)
                 return
         
         await update.message.reply_text(
