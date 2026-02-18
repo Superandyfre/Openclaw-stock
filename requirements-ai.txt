@@ -13,8 +13,3 @@ prophet==1.1.6  # Updated to latest version
 
 # Traditional machine learning
 scikit-learn==1.6.1  # Updated to latest stable version
-
-# Technical analysis
-# TA-Lib requires system library installation first
-# TA-Lib==0.4.28
-pandas-ta==0.3.14b
