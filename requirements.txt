@@ -10,6 +10,7 @@ websockets==14.1  # Updated to latest stable version
 
 # API clients
 finnhub-python==2.4.20  # Primary stock data source
+pykrx>=1.0.46  # Korean stock market data (KRX) - primary for Korean stocks
 yfinance==0.2.52  # Updated to latest version (backup/legacy)
 requests==2.32.3  # Updated for security patches
 python-binance==1.0.19

@@ -67,12 +67,124 @@ An advanced AI-powered automated trading system supporting both **long-term** an
 | Source | Type | Rate Limit | Cost | Status |
 |--------|------|------------|------|--------|
 | **Finnhub** | Stocks | 60/min | Free | ✅ Primary |
+| **pykrx** | Korean Stocks | Unlimited | Free | ✅ Primary (KR) |
 | Alpha Vantage | Stocks | 5/min | Free | 🔄 Backup |
 | Yahoo Finance | Stocks | Variable | Free | 📦 Legacy |
 | Upbit WebSocket | Crypto | Unlimited | Free | ✅ Active |
 | Naver News | News | ~20/day | Free | ✅ Active |
 | CryptoPanic | Crypto News | Limited | Free | ✅ Active |
 | DART | Announcements | 240/day | Free | ✅ Active |
+
+### 🇰🇷 Korean Stock Data Architecture (V2 - pykrx Dominant)
+
+OpenClaw uses a **pykrx-dominant architecture** for Korean stock data, optimized for high-frequency monitoring without rate limits.
+
+#### Data Source Priority
+
+| Priority | Source | Usage | Purpose |
+|----------|--------|-------|---------|
+| **1** | **pykrx** | **99%+** | All price queries, most name queries |
+| **2** | Redis Cache | High | 30s for prices, 24h for names |
+| **3** | Local Mapping | Low | 25+ major stocks as fallback |
+| **4** | Yahoo Finance | **<1%** | Only for unknown stock names (one-time) |
+
+#### Why pykrx?
+
+- ✅ **No API Key Required**: Direct access to KRX (Korean Exchange) data
+- ✅ **No Rate Limits**: Safe for high-frequency monitoring (30-second intervals)
+- ✅ **Accurate Data**: Direct from Korean Exchange (KRX)
+- ✅ **Korean Names**: Native 한글 stock names (삼성전자, SK하이닉스, etc.)
+- ✅ **Complete OHLCV**: Full market data (Open, High, Low, Close, Volume)
+- ✅ **Zero Latency**: Real-time data without 15-second Yahoo delays
+
+#### Yahoo Finance Restrictions
+
+Yahoo Finance is **intentionally restricted** in V2:
+
+- ❌ **Never used for price queries** (only pykrx)
+- ⚠️ **Only used for stock names** when both pykrx and local mapping fail
+- ⚠️ **Each stock queries Yahoo at most once** (then permanently cached)
+- 📊 **Target usage: <1% of all queries**
+
+This eliminates Yahoo's ~2,000 requests/hour rate limit issues.
+
+#### Expected Statistics
+
+After running for 1 hour with 6 stocks monitored at 30-second intervals:
+
+```
+📊 Statistics:
+   pykrx calls: 720 (120 cycles × 6 stocks)
+   pykrx success rate: 99.7%
+   Cache hit rate: 45.2%
+   Local fallback: 2 times (0.3%)
+   Yahoo fallback: 0 times (0.0%) ✅
+
+Data Source Distribution:
+   pykrx: 99.7%
+   Local mapping: 0.3%
+   Yahoo Finance: 0.0% ✅
+```
+
+#### Usage Example
+
+```python
+from openclaw.skills.monitoring.korean_stock_fetcher_v2 import KoreanStockFetcherV2
+from openclaw.core.database import DatabaseManager
+
+db = DatabaseManager()
+fetcher = KoreanStockFetcherV2(db)
+
+# Get stock price (100% pykrx)
+price_data = await fetcher.get_stock_price('005930')
+print(f"Price: ₩{price_data['price']:,} (Source: {price_data['source']})")
+# Output: Price: ₩73,500 (Source: pykrx)
+
+# Get stock name (pykrx > local > yahoo)
+name = await fetcher.get_stock_name('005930')
+print(f"Name: {name}")
+# Output: Name: 삼성전자
+
+# Check statistics
+stats = fetcher.get_stats()
+print(f"Yahoo usage: {stats['yahoo_usage_rate']:.1f}%")
+# Output: Yahoo usage: 0.0%
+```
+
+#### High-Frequency Monitoring
+
+```python
+from openclaw.skills.monitoring.korean_stock_monitor_v2 import KoreanStockMonitorV2
+
+monitor = KoreanStockMonitorV2(
+    db_manager=db,
+    watch_list=['005930', '035420', '000660'],  # Samsung, NAVER, SK Hynix
+    threshold=2.0,   # Alert on ±2% change
+    interval=30      # 30-second polling
+)
+
+# Start monitoring (30-second intervals, 100% pykrx)
+await monitor.start()
+
+# Output:
+# 🚀 Starting Korean Stock Monitor V2
+#    Data source: pykrx (100% for prices)
+#    Yahoo: Disabled for high-frequency (names only, <1%)
+#    Polling interval: 30s
+#    Threshold: ±2%
+```
+
+#### Local Stock Mapping (25+ Major Stocks)
+
+Built-in fallback for 25+ major Korean stocks:
+
+- 삼성전자 (Samsung Electronics) - 005930
+- SK하이닉스 (SK Hynix) - 000660
+- NAVER - 035420
+- 카카오 (Kakao) - 035720
+- LG화학 (LG Chem) - 051910
+- 삼성바이오로직스 (Samsung Biologics) - 207940
+- And 19+ more...
 
 ## ✨ 2026 Edition Upgrades
 
