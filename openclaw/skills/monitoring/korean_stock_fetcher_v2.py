@@ -174,6 +174,8 @@ class KoreanStockFetcherV2:
             latest = df.iloc[-1]
             
             # Get previous close for change calculation
+            # Note: Using simple day-1 approach. In production, should account for
+            # weekends and holidays to find last actual trading day
             yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
             prev_df = await asyncio.to_thread(
                 pykrx_stock.get_market_ohlcv_by_date,
@@ -182,7 +184,13 @@ class KoreanStockFetcherV2:
                 code
             )
             
-            prev_close = prev_df.iloc[-1]['종가'] if prev_df is not None and not prev_df.empty else latest['시가']
+            # Use previous close if available, otherwise use today's open
+            # Log when fallback is used
+            if prev_df is not None and not prev_df.empty:
+                prev_close = prev_df.iloc[-1]['종가']
+            else:
+                prev_close = latest['시가']
+                logger.debug(f"No previous data for {code}, using today's open price for change calculation")
             
             # Calculate change
             current_price = float(latest['종가'])
@@ -408,12 +416,16 @@ class KoreanStockFetcherV2:
         """
         Check if within Korean trading hours
         
-        Korean market: 09:00-15:30 KST
-        Beijing time: 08:00-14:30 CST (same timezone as KST)
+        Korean market: 09:00-15:30 KST (UTC+9)
+        
+        Note: This method assumes the system is running in KST/UTC+9 timezone.
+        For production use in other timezones, use timezone-aware datetime objects.
         
         Returns:
             True if within trading hours
         """
+        # Note: Assumes system time is in KST (UTC+9)
+        # For multi-timezone deployments, use: datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Seoul"))
         now = datetime.now()
         hour, minute = now.hour, now.minute
         
@@ -421,10 +433,11 @@ class KoreanStockFetcherV2:
         if now.weekday() >= 5:  # Saturday = 5, Sunday = 6
             return False
         
-        # Market hours: 08:00-14:30 (Beijing/KST time)
-        if hour < 8 or hour > 14:
+        # Korean market hours: 09:00-15:30 KST
+        # Assuming local system time is KST
+        if hour < 9 or hour > 15:
             return False
-        if hour == 14 and minute > 30:
+        if hour == 15 and minute > 30:
             return False
         
         return True
@@ -501,7 +514,9 @@ class KoreanStockFetcherV2:
     
     def _log_stats(self):
         """Log data source usage statistics"""
-        total = self.stats['pykrx_calls'] + self.stats['cache_hits']
+        # Total includes all query types for accurate percentages
+        total = (self.stats['pykrx_calls'] + self.stats['cache_hits'] + 
+                 self.stats['local_fallback'] + self.stats['yahoo_fallback'])
         if total == 0:
             return
         
@@ -526,7 +541,9 @@ class KoreanStockFetcherV2:
         Returns:
             Dictionary with statistics and calculated rates
         """
-        total = self.stats['pykrx_calls'] + self.stats['cache_hits']
+        # Total includes all query types for accurate percentages
+        total = (self.stats['pykrx_calls'] + self.stats['cache_hits'] + 
+                 self.stats['local_fallback'] + self.stats['yahoo_fallback'])
         
         return {
             **self.stats,
