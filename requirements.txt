@@ -9,7 +9,8 @@ numpy==1.26.4  # Updated to latest 1.x version
 websockets==14.1  # Updated to latest stable version
 
 # API clients
-yfinance==0.2.52  # Updated to latest version
+finnhub-python==2.4.20  # Primary stock data source
+yfinance==0.2.52  # Updated to latest version (backup/legacy)
 requests==2.32.3  # Updated for security patches
 python-binance==1.0.19
 
