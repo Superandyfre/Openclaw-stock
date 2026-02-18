@@ -37,9 +37,9 @@ An advanced AI-powered automated trading system supporting both **long-term** an
 - **Isolation Forest**: Real-time anomaly detection
 
 #### LLM (Anomaly-Triggered, 1-3s)
-- **2026 Edition**: Gemini 3 Flash (primary) + Claude Opus 4.6 (complex) + DeepSeek-R1 (backup)
-- **Intelligent Routing**: Automatically selects best model based on complexity
-- **Multi-Level Fallback**: Ensures 99.9% uptime with fallback chain
+- **2026 Simplified Edition**: Gemini 3 Flash (primary, 100%) + DeepSeek-R1 (emergency backup)
+- **Dual-Model Architecture**: Simple, reliable, cost-effective
+- **Smart Fallback**: Automatic failover if primary model unavailable
 - **Global News Context**: Analysis includes 100+ global news sources
 - **Korean Won Display**: All prices in ₩ KRW for unified reporting
 - **Smart Prompt Engineering**: Optimized for 2026 model capabilities
@@ -61,39 +61,35 @@ An advanced AI-powered automated trading system supporting both **long-term** an
 
 ## ✨ 2026 Edition Upgrades
 
-### 🤖 Advanced LLM Architecture
-OpenClaw now uses the latest 2026 LLM models with intelligent routing:
+### 🤖 Dual-Model LLM Architecture
+OpenClaw uses a simplified 2026 LLM architecture focused on reliability and cost-effectiveness:
 
 #### Primary Model: Gemini 3 Flash
-- **Usage**: 90% of daily anomaly analysis
+- **Usage**: 100% of daily anomaly analysis
 - **Speed**: 1-3 seconds response time
 - **Cost**: FREE (5000 requests/month)
 - **Context**: 1M tokens (can analyze all news at once)
 - **Features**: Google Search Grounding, multilingual support
-- **Perfect for**: Fast daily trading decisions
+- **Perfect for**: All trading decisions - fast and powerful
 
-#### Secondary Model: Claude Opus 4.6
-- **Usage**: 10% (complex scenarios only)
-- **Triggers**: 
-  - Critical severity anomalies
-  - Price changes >5% in 5 minutes
-  - Flash crashes / black swan events
-  - Large news volume (>50 articles)
-- **Strength**: Best-in-class financial reasoning
-- **Cost**: ~$1.84/month for typical usage
-
-#### Backup Model: DeepSeek-R1
-- **Usage**: Fallback when primary/secondary fail
+#### Emergency Backup: DeepSeek-R1
+- **Usage**: Only when Gemini fails
 - **Strength**: Cost-effective, reliable
 - **Features**: Reinforcement learning reasoning
+- **Cost**: ~¥0.5/month for emergency usage
 
-**Smart Routing**: The system automatically selects the best model based on:
-- Anomaly severity
-- Price volatility
-- News volume
-- Complexity of analysis
+**Why This Architecture?**
+- ✅ **Simpler**: Only 2 models to configure (vs 3 previously)
+- ✅ **Cheaper**: $0/month vs $1.84/month (100% free tier)
+- ✅ **No Credit Card**: Gemini is completely free, no payment required
+- ✅ **Powerful Enough**: Gemini 3 Flash handles all scenarios excellently
 
-**Multi-Level Fallback**: If one model fails, automatically tries: Gemini → Claude → DeepSeek
+**What Changed?**
+- ❌ **Removed**: Claude Opus 4.6 (required credit card, added complexity)
+- ✅ **Kept**: Gemini 3 Flash (free, powerful, 1M context)
+- ✅ **Kept**: DeepSeek-R1 (emergency backup only)
+
+**Smart Fallback**: If Gemini fails, automatically uses DeepSeek → Ensures 99.9% uptime
 
 ### 🌍 Global News Integration (100+ Sources)
 
@@ -150,18 +146,19 @@ Confidence: 8/10
 
 ### 📊 Cost Efficiency
 
-**2026 Total Operating Cost: ~₩2,456/month ($1.84)**
+**2026 Total Operating Cost: ₩0/month ($0)**
 
 Breakdown:
-- Gemini 3 Flash: ₩0 (free tier)
-- Claude Opus 4.6: ~₩2,456 (20 calls/month)
+- Gemini 3 Flash: ₩0 (free tier, 5000 requests/month)
+- DeepSeek-R1: ₩0-₩670 (~$0.50, emergency usage only)
 - Global News: ₩0 (RSS feeds)
 - Exchange Rates: ₩0 (free API)
 
 **Compared to alternatives:**
 - GPT-4o (all calls): ~₩120,150/month
-- Claude only (all calls): ~₩44,055/month
-- **Savings: 98%** while maintaining top-tier quality
+- Old architecture (with Claude): ~₩2,456/month
+- **New architecture: ₩0/month** 🎉
+- **Savings: 100%** while maintaining excellent quality
 
 ## 📊 Architecture Design
 
@@ -232,15 +229,12 @@ cp .env.example .env
 # Edit .env with your API keys
 ```
 
-**Required API Keys (2026 Edition):**
+**Required API Keys (2026 Simplified Edition):**
 ```bash
-# Primary LLM (Free 5000 requests/month)
+# Primary LLM (Free, 5000 requests/month) - REQUIRED
 GOOGLE_AI_API_KEY=your_key  # Get at: https://aistudio.google.com/apikey
 
-# Secondary LLM (Complex scenarios)
-ANTHROPIC_API_KEY=your_key  # Get at: https://console.anthropic.com/
-
-# Backup LLM (Optional)
+# Emergency Backup LLM (Optional but recommended)
 DEEPSEEK_API_KEY=your_key   # Get at: https://platform.deepseek.com/
 
 # Data sources (Optional for basic testing)
@@ -253,7 +247,7 @@ TELEGRAM_BOT_TOKEN=your_token
 TELEGRAM_CHAT_ID=your_chat_id
 ```
 
-**Note**: The system works with just Gemini API key (free). Other keys are optional for enhanced functionality.
+**Note**: The system works with just Gemini API key (free, no credit card). DeepSeek is optional for emergency backup. Other keys are optional for enhanced functionality.
 
 4. **Run the system**
 ```bash

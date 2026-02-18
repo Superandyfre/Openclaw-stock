@@ -85,30 +85,30 @@ class TestAIModels:
         assert hasattr(manager, 'asset_keywords')
     
     def test_model_routing_logic(self):
-        """Test intelligent model routing"""
+        """Test intelligent model routing (dual-model architecture)"""
         from openclaw.skills.analysis.ai_models import AIModelManager
         
         manager = AIModelManager()
         
-        # Test routing for normal scenario
+        # Test routing for normal scenario (should always choose gemini)
         context = {
             'severity': 'low',
             'change_5m': 1.5,
             'anomaly_type': 'price_spike'
         }
         model = manager._choose_model(context, [])
-        # Should choose 'none' if no clients available in test
-        assert model in ['gemini', 'claude', 'deepseek', 'none']
+        # Should choose gemini (or none if no clients available in test)
+        assert model in ['gemini', 'deepseek', 'none']
         
-        # Test routing for critical scenario
+        # Test routing for critical scenario (still gemini in dual-model)
         context = {
             'severity': 'critical',
             'change_5m': 7.5,
             'anomaly_type': 'flash_crash'
         }
         model = manager._choose_model(context, [])
-        # Should prefer Claude for complex scenarios (if available)
-        assert model in ['claude', 'gemini', 'deepseek', 'none']
+        # Should still prefer gemini in dual-model architecture
+        assert model in ['gemini', 'deepseek', 'none']
     
     def test_news_deduplication(self):
         """Test news deduplication"""
@@ -147,7 +147,7 @@ class TestAIModels:
         assert scored[0]['relevance_score'] > 0
     
     def test_model_statistics(self):
-        """Test model usage statistics"""
+        """Test model usage statistics (dual-model architecture)"""
         from openclaw.skills.analysis.ai_models import AIModelManager
         
         manager = AIModelManager()
@@ -157,8 +157,9 @@ class TestAIModels:
         assert 'models' in stats
         assert 'total_calls' in stats
         assert 'gemini' in stats['models']
-        assert 'claude' in stats['models']
         assert 'deepseek' in stats['models']
+        # Claude removed from dual-model architecture
+        assert 'claude' not in stats['models']
 
 
 class TestAlertManager:
