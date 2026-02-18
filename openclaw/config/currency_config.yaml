@@ -1,0 +1,90 @@
+# Currency Configuration for OpenClaw
+# All prices will be displayed in Korean Won (KRW)
+
+primary_currency: KRW
+currency_symbol: "₩"
+
+# Exchange Rate API Configuration
+exchange_rate:
+  # Primary source (free, no registration required)
+  primary_api: "https://api.exchangerate-api.com/v4/latest/KRW"
+  
+  # Backup source
+  backup_api: "https://open.er-api.com/v6/latest/KRW"
+  
+  # Cache settings
+  cache_duration_hours: 1
+  
+  # Timeout settings
+  timeout_seconds: 10
+  
+  # Fallback rates (used when API fails) - 2026 February reference
+  fallback_rates:
+    USD: 1335.0   # 1 USD = 1335 KRW
+    EUR: 1450.0   # 1 EUR = 1450 KRW
+    JPY: 8.9      # 1 JPY = 8.9 KRW
+    CNY: 185.0    # 1 CNY = 185 KRW
+    GBP: 1690.0   # 1 GBP = 1690 KRW
+    AUD: 875.0    # 1 AUD = 875 KRW
+    CAD: 975.0    # 1 CAD = 975 KRW
+    CHF: 1520.0   # 1 CHF = 1520 KRW
+    HKD: 171.0    # 1 HKD = 171 KRW
+    SGD: 990.0    # 1 SGD = 990 KRW
+
+# Asset Native Currency Mapping
+# Determines the original currency of each asset
+asset_currency_mapping:
+  # Korean stocks (KOSPI)
+  patterns:
+    - pattern: ".*\\.KS$"
+      currency: KRW
+      description: "KOSPI stocks"
+    
+    - pattern: ".*\\.KQ$"
+      currency: KRW
+      description: "KOSDAQ stocks"
+    
+    # US stocks
+    - pattern: "^[A-Z]{1,5}$"
+      currency: USD
+      description: "US stocks"
+    
+    # Crypto (Yahoo Finance format)
+    - pattern: ".*-USD$"
+      currency: USD
+      description: "Cryptocurrencies"
+    
+    # Upbit crypto (KRW pairs)
+    - pattern: "^KRW-.*"
+      currency: KRW
+      description: "Upbit KRW pairs"
+  
+  # Default currency for unlisted assets
+  default: USD
+
+# Formatting Rules
+formatting:
+  krw:
+    # No decimal places for KRW
+    decimal_places: 0
+    
+    # Use thousand separators
+    thousand_separator: ","
+    
+    # Currency symbol position
+    symbol_position: "prefix"  # ₩75,000
+    
+    # Examples:
+    # 89445000 -> ₩89,445,000
+    # 1234.56 -> ₩1,235
+  
+  percentage:
+    # Percentage decimal places
+    decimal_places: 2
+    
+    # Show sign for positive values
+    show_positive_sign: true
+    
+    # Examples:
+    # 0.0235 -> +2.35%
+    # -0.0147 -> -1.47%
