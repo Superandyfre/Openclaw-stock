@@ -30,6 +30,7 @@ models/
 *.ckpt
 *.bin
 *.safetensors
+*.pt
 
 # Data
 data/
@@ -69,3 +70,28 @@ htmlcov/
 tmp/
 temp/
 *.tmp
+
+# Backups
+*.backup
+*.backup.*
+*.bak
+
+# Cache
+.cache/
+*.cache
+
+# Redis data
+redis-data/
+
+# Development scripts (not for production)
+fix_*.sh
+fix_*.py
+test_*.sh
+test_*.py
+setup_*.sh
+cleanup_*.sh
+*_temp.py
+*_tmp.py
+diagnose.sh
+debug_*.py
+debug_*.sh
