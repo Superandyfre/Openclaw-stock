@@ -1,0 +1,72 @@
+Defaulting to user installation because normal site-packages is not writeable
+Collecting pykrx
+  Downloading pykrx-1.2.4-py3-none-any.whl.metadata (64 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 64.0/64.0 kB 18.8 MB/s eta 0:00:00
+Collecting requests>=2.32.0 (from pykrx)
+  Downloading requests-2.32.5-py3-none-any.whl.metadata (4.9 kB)
+Collecting pandas<3.0,>=2.2.0 (from pykrx)
+  Downloading pandas-2.3.3-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (91 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 91.2/91.2 kB 28.7 MB/s eta 0:00:00
+Collecting numpy<2.0,>=1.24.0 (from pykrx)
+  Downloading numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (61 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 61.0/61.0 kB 8.5 MB/s eta 0:00:00
+Collecting deprecated>=1.2.14 (from pykrx)
+  Downloading deprecated-1.3.1-py2.py3-none-any.whl.metadata (5.9 kB)
+Collecting multipledispatch>=1.0.0 (from pykrx)
+  Downloading multipledispatch-1.0.0-py3-none-any.whl.metadata (3.8 kB)
+Collecting matplotlib>=3.8.0 (from pykrx)
+  Downloading matplotlib-3.10.8-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (52 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 52.8/52.8 kB 16.5 MB/s eta 0:00:00
+Collecting wrapt<3,>=1.10 (from deprecated>=1.2.14->pykrx)
+  Downloading wrapt-2.1.1-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (7.4 kB)
+Collecting contourpy>=1.0.1 (from matplotlib>=3.8.0->pykrx)
+  Downloading contourpy-1.3.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (5.5 kB)
+Collecting cycler>=0.10 (from matplotlib>=3.8.0->pykrx)
+  Downloading cycler-0.12.1-py3-none-any.whl.metadata (3.8 kB)
+Collecting fonttools>=4.22.0 (from matplotlib>=3.8.0->pykrx)
+  Downloading fonttools-4.61.1-cp312-cp312-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl.metadata (114 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 114.2/114.2 kB 35.5 MB/s eta 0:00:00
+Collecting kiwisolver>=1.3.1 (from matplotlib>=3.8.0->pykrx)
+  Downloading kiwisolver-1.4.9-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (6.3 kB)
+Requirement already satisfied: packaging>=20.0 in /usr/lib/python3/dist-packages (from matplotlib>=3.8.0->pykrx) (24.0)
+Collecting pillow>=8 (from matplotlib>=3.8.0->pykrx)
+  Downloading pillow-12.1.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (8.8 kB)
+Requirement already satisfied: pyparsing>=3 in /usr/lib/python3/dist-packages (from matplotlib>=3.8.0->pykrx) (3.1.1)
+Requirement already satisfied: python-dateutil>=2.7 in /usr/lib/python3/dist-packages (from matplotlib>=3.8.0->pykrx) (2.8.2)
+Requirement already satisfied: pytz>=2020.1 in /usr/lib/python3/dist-packages (from pandas<3.0,>=2.2.0->pykrx) (2024.1)
+Collecting tzdata>=2022.7 (from pandas<3.0,>=2.2.0->pykrx)
+  Downloading tzdata-2025.3-py2.py3-none-any.whl.metadata (1.4 kB)
+Collecting charset_normalizer<4,>=2 (from requests>=2.32.0->pykrx)
+  Downloading charset_normalizer-3.4.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (37 kB)
+Requirement already satisfied: idna<4,>=2.5 in /usr/lib/python3/dist-packages (from requests>=2.32.0->pykrx) (3.6)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/lib/python3/dist-packages (from requests>=2.32.0->pykrx) (2.0.7)
+Requirement already satisfied: certifi>=2017.4.17 in /usr/lib/python3/dist-packages (from requests>=2.32.0->pykrx) (2023.11.17)
+Downloading pykrx-1.2.4-py3-none-any.whl (2.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.2/2.2 MB 139.6 MB/s eta 0:00:00
+Downloading deprecated-1.3.1-py2.py3-none-any.whl (11 kB)
+Downloading matplotlib-3.10.8-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (8.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.7/8.7 MB 99.4 MB/s eta 0:00:00
+Downloading multipledispatch-1.0.0-py3-none-any.whl (12 kB)
+Downloading numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (18.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 18.0/18.0 MB 159.0 MB/s eta 0:00:00
+Downloading pandas-2.3.3-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (12.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.4/12.4 MB 162.2 MB/s eta 0:00:00
+Downloading requests-2.32.5-py3-none-any.whl (64 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 64.7/64.7 kB 10.7 MB/s eta 0:00:00
+Downloading charset_normalizer-3.4.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (153 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 153.5/153.5 kB 44.5 MB/s eta 0:00:00
+Downloading contourpy-1.3.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (362 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 362.6/362.6 kB 83.1 MB/s eta 0:00:00
+Downloading cycler-0.12.1-py3-none-any.whl (8.3 kB)
+Downloading fonttools-4.61.1-cp312-cp312-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl (5.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.0/5.0 MB 155.5 MB/s eta 0:00:00
+Downloading kiwisolver-1.4.9-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.5/1.5 MB 135.4 MB/s eta 0:00:00
+Downloading pillow-12.1.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (7.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.0/7.0 MB 163.8 MB/s eta 0:00:00
+Downloading tzdata-2025.3-py2.py3-none-any.whl (348 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 348.5/348.5 kB 78.5 MB/s eta 0:00:00
+Downloading wrapt-2.1.1-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (121 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 121.3/121.3 kB 38.0 MB/s eta 0:00:00
+Installing collected packages: multipledispatch, wrapt, tzdata, pillow, numpy, kiwisolver, fonttools, cycler, charset_normalizer, requests, pandas, deprecated, contourpy, matplotlib, pykrx
+Successfully installed charset_normalizer-3.4.4 contourpy-1.3.3 cycler-0.12.1 deprecated-1.3.1 fonttools-4.61.1 kiwisolver-1.4.9 matplotlib-3.10.8 multipledispatch-1.0.0 numpy-1.26.4 pandas-2.3.3 pillow-12.1.1 pykrx-1.2.4 requests-2.32.5 tzdata-2025.3 wrapt-2.1.1
