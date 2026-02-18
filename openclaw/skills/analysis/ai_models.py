@@ -1,8 +1,9 @@
 """
 AI Models Manager for OpenClaw Trading System
-2026 Edition with Gemini 3 Flash, Claude Opus 4.6, and DeepSeek-R1
+2026 Edition with Gemini 3 Flash and DeepSeek-R1
 
 Manages both dedicated models (high-frequency) and LLM (anomaly-triggered)
+Dual-model architecture: Gemini (primary) + DeepSeek (emergency backup)
 """
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timedelta
@@ -36,12 +37,8 @@ except ImportError:
     GEMINI_AVAILABLE = False
     logger.warning("Google Generative AI not available, Gemini 3 disabled")
 
-try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
-except ImportError:
-    ANTHROPIC_AVAILABLE = False
-    logger.warning("Anthropic not available, Claude Opus 4.6 disabled")
+# Claude removed from architecture - using Gemini + DeepSeek only
+ANTHROPIC_AVAILABLE = False
 
 try:
     from openai import AsyncOpenAI
@@ -73,9 +70,9 @@ class AIModelManager:
     """
     Manages AI models for trading analysis
     
-    Architecture (2026 Edition):
+    Architecture (2026 Simplified Edition):
     - Dedicated models: Used in high-frequency loop (~50-100ms)
-    - LLM (2026): Gemini 3 Flash (primary) + Claude Opus 4.6 (complex) + DeepSeek-R1 (backup)
+    - LLM (Dual-model): Gemini 3 Flash (primary, 100%) + DeepSeek-R1 (emergency backup)
     - Global news: 100+ sources from 7 continents
     - Currency: All prices in Korean Won (KRW)
     """
@@ -86,9 +83,8 @@ class AIModelManager:
         
         Args:
             api_keys: Dictionary containing API keys for LLMs
-                - google_ai_api_key: Google AI API key
-                - anthropic_api_key: Anthropic API key
-                - deepseek_api_key: DeepSeek API key
+                - google_ai_api_key: Google AI API key (required)
+                - deepseek_api_key: DeepSeek API key (optional, emergency backup)
         """
         self.models = {}
         self.tokenizers = {}
@@ -98,14 +94,11 @@ class AIModelManager:
         self.api_keys = api_keys or {}
         if not self.api_keys.get('google_ai_api_key'):
             self.api_keys['google_ai_api_key'] = os.getenv('GOOGLE_AI_API_KEY', '')
-        if not self.api_keys.get('anthropic_api_key'):
-            self.api_keys['anthropic_api_key'] = os.getenv('ANTHROPIC_API_KEY', '')
         if not self.api_keys.get('deepseek_api_key'):
             self.api_keys['deepseek_api_key'] = os.getenv('DEEPSEEK_API_KEY', '')
         
-        # Initialize 2026 LLM clients
+        # Initialize 2026 LLM clients (dual-model architecture)
         self.gemini_client = None
-        self.claude_client = None
         self.deepseek_client = None
         self._init_llm_clients()
         
@@ -118,10 +111,9 @@ class AIModelManager:
         self.news_cache: Dict[str, Tuple[datetime, List[Dict[str, Any]]]] = {}
         self.news_cache_ttl = timedelta(minutes=5)
         
-        # Model usage statistics
+        # Model usage statistics (dual-model)
         self.model_stats = {
             'gemini': {'calls': 0, 'successes': 0, 'failures': 0},
-            'claude': {'calls': 0, 'successes': 0, 'failures': 0},
             'deepseek': {'calls': 0, 'successes': 0, 'failures': 0},
         }
         
@@ -137,34 +129,24 @@ class AIModelManager:
         self._load_models()
     
     def _init_llm_clients(self):
-        """Initialize 2026 LLM clients"""
-        # Gemini 3 Flash
+        """Initialize 2026 LLM clients (dual-model architecture)"""
+        # Gemini 3 Flash (Primary - 100% usage)
         if GEMINI_AVAILABLE and self.api_keys.get('google_ai_api_key'):
             try:
                 genai.configure(api_key=self.api_keys['google_ai_api_key'])
                 self.gemini_client = genai.GenerativeModel('gemini-1.5-flash')
-                logger.info("✅ Gemini 3 Flash client initialized")
+                logger.info("✅ Gemini 3 Flash client initialized (primary model)")
             except Exception as e:
                 logger.warning(f"Failed to initialize Gemini client: {e}")
         
-        # Claude Opus 4.6
-        if ANTHROPIC_AVAILABLE and self.api_keys.get('anthropic_api_key'):
-            try:
-                self.claude_client = anthropic.AsyncAnthropic(
-                    api_key=self.api_keys['anthropic_api_key']
-                )
-                logger.info("✅ Claude Opus 4.6 client initialized")
-            except Exception as e:
-                logger.warning(f"Failed to initialize Claude client: {e}")
-        
-        # DeepSeek-R1
+        # DeepSeek-R1 (Emergency backup only)
         if OPENAI_AVAILABLE and self.api_keys.get('deepseek_api_key'):
             try:
                 self.deepseek_client = AsyncOpenAI(
                     api_key=self.api_keys['deepseek_api_key'],
                     base_url="https://api.deepseek.com/v1"
                 )
-                logger.info("✅ DeepSeek-R1 client initialized")
+                logger.info("✅ DeepSeek-R1 client initialized (emergency backup)")
             except Exception as e:
                 logger.warning(f"Failed to initialize DeepSeek client: {e}")
     
@@ -645,40 +627,29 @@ Provide:
         all_news: List[Dict[str, Any]]
     ) -> str:
         """
-        Intelligently choose the best LLM model for the analysis
+        Choose the LLM model for analysis (simplified dual-model architecture)
+        
+        Always uses Gemini 3 Flash as the primary model.
+        DeepSeek is only used if Gemini fails.
         
         Args:
             context: Market context
             all_news: All relevant news
         
         Returns:
-            Model name ('gemini', 'claude', or 'deepseek')
+            Model name ('gemini' always, unless unavailable)
         """
-        severity = context.get('severity', 'low')
-        change_5m = abs(float(context.get('change_5m', 0)))
-        anomaly_type = context.get('anomaly_type', '')
-        
-        # Complex scenarios → Claude Opus 4.6 (best reasoning)
-        if (severity == 'critical' or 
-            change_5m > 5 or 
-            'flash_crash' in anomaly_type or
-            'black_swan' in anomaly_type or
-            len(all_news) > 50):
-            if self.claude_client:
-                logger.info(f"🎯 Routing to Claude Opus 4.6 (complex scenario)")
-                return 'claude'
-        
-        # Default → Gemini 3 Flash (fast and free)
+        # Always use Gemini 3 Flash (primary model)
         if self.gemini_client:
-            logger.info(f"⚡ Routing to Gemini 3 Flash (standard analysis)")
+            logger.info(f"⚡ Using Gemini 3 Flash (primary model)")
             return 'gemini'
         
-        # Fallback to DeepSeek
+        # Fallback to DeepSeek only if Gemini unavailable
         if self.deepseek_client:
-            logger.info(f"🔄 Routing to DeepSeek-R1 (fallback)")
+            logger.warning(f"🔄 Gemini unavailable, using DeepSeek-R1 (emergency)")
             return 'deepseek'
         
-        logger.warning("No LLM available, using rule-based analysis")
+        logger.error("No LLM available")
         return 'none'
     
     async def _call_gemini(
@@ -719,54 +690,13 @@ Provide:
             logger.error(f"Gemini API call failed: {e}")
             return None
     
-    async def _call_claude(
-        self,
-        prompt: str,
-        timeout: int = 15
-    ) -> Optional[str]:
-        """
-        Call Claude Opus 4.6 API
-        
-        Args:
-            prompt: Prompt text
-            timeout: Timeout in seconds
-        
-        Returns:
-            Response text or None
-        """
-        if not self.claude_client:
-            return None
-        
-        try:
-            self.model_stats['claude']['calls'] += 1
-            
-            # Create message
-            response = await asyncio.wait_for(
-                self.claude_client.messages.create(
-                    model="claude-3-5-sonnet-20241022",  # Latest available
-                    max_tokens=2000,
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ]
-                ),
-                timeout=timeout
-            )
-            
-            self.model_stats['claude']['successes'] += 1
-            return response.content[0].text
-        
-        except Exception as e:
-            self.model_stats['claude']['failures'] += 1
-            logger.error(f"Claude API call failed: {e}")
-            return None
-    
     async def _call_deepseek(
         self,
         prompt: str,
         timeout: int = 15
     ) -> Optional[str]:
         """
-        Call DeepSeek-R1 API
+        Call DeepSeek-R1 API (emergency backup)
         
         Args:
             prompt: Prompt text
@@ -807,30 +737,29 @@ Provide:
         preferred_model: str
     ) -> Tuple[Optional[str], str]:
         """
-        Call LLM with automatic fallback
+        Call LLM with automatic fallback (dual-model architecture)
+        
+        Fallback chain: Gemini ↔ DeepSeek
         
         Args:
             prompt: Prompt text
-            preferred_model: Preferred model name
+            preferred_model: Preferred model name ('gemini' or 'deepseek')
         
         Returns:
             (response_text, actual_model_used)
         """
-        # Define fallback order for each model
-        fallback_order = {
-            'gemini': ['gemini', 'claude', 'deepseek'],
-            'claude': ['claude', 'gemini', 'deepseek'],
-            'deepseek': ['deepseek', 'gemini', 'claude'],
-        }
-        
-        models_to_try = fallback_order.get(preferred_model, ['gemini', 'claude', 'deepseek'])
+        # Simplified fallback order for dual-model architecture
+        if preferred_model == 'gemini':
+            models_to_try = ['gemini', 'deepseek']
+        elif preferred_model == 'deepseek':
+            models_to_try = ['deepseek', 'gemini']
+        else:
+            models_to_try = ['gemini', 'deepseek']
         
         for model in models_to_try:
             try:
                 if model == 'gemini':
                     response = await self._call_gemini(prompt)
-                elif model == 'claude':
-                    response = await self._call_claude(prompt)
                 elif model == 'deepseek':
                     response = await self._call_deepseek(prompt)
                 else:

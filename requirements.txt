@@ -32,10 +32,9 @@ python-telegram-bot==21.9  # Updated to latest stable version
 pytest==8.3.4  # Updated to latest stable version
 pytest-asyncio==0.24.0  # Updated to latest version
 
-# 2026 LLM Integration
-google-generativeai>=0.8.0  # Gemini 3 Flash support
-anthropic>=0.45.0           # Claude Opus 4.6 support  
-openai>=1.50.0              # DeepSeek-R1 compatibility
+# 2026 LLM Integration (Dual-Model Architecture)
+google-generativeai>=0.8.0  # Gemini 3 Flash (primary)
+openai>=1.50.0              # DeepSeek-R1 compatibility (emergency backup)
 
 # Global News Aggregation
 feedparser>=6.0.10          # RSS feed parsing
