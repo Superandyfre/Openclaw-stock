@@ -556,6 +556,236 @@ position_size = risk_mgr.calculate_position_size(
 stop_loss = risk_mgr.calculate_stop_loss(entry_price=150.0)
 ```
 
+## 🤖 Telegram Bot Integration
+
+OpenClaw now includes a comprehensive Telegram bot for portfolio management and trading.
+
+### Features
+
+- **Real-time Asset Names**: All stock and cryptocurrency names fetched via APIs
+  - Korean Stocks: Yahoo Finance API
+  - Cryptocurrencies: CoinGecko API
+  - 24-hour Redis caching for efficiency
+
+- **Portfolio Management**:
+  - View positions with full asset names
+  - Track stocks and crypto separately
+  - Real-time P&L calculations
+  - Portfolio breakdown by asset type
+
+- **AI Recommendations**:
+  - Stock recommendations (Gemini Flash / DeepSeek-V3)
+  - Cryptocurrency recommendations
+  - Natural language support (Korean/English)
+  - Market analysis and insights
+
+- **Trading Commands**:
+  - Manual buy/sell recording
+  - Trading history with full names
+  - Interactive signal confirmations
+
+### Setup
+
+1. **Create a Telegram bot via [@BotFather](https://t.me/botfather)**
+   - Send `/newbot` to @BotFather
+   - Follow prompts to name your bot
+   - Save the bot token
+
+2. **Get your chat ID**
+   - Message your bot
+   - Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+   - Find `"chat":{"id":...}` and save the ID
+
+3. **Configure `.env`**:
+   ```bash
+   TELEGRAM_BOT_TOKEN=your_token_here
+   TELEGRAM_CHAT_ID=your_chat_id_here
+   ENABLE_TELEGRAM_BOT=true
+   ```
+
+4. **Run the bot**:
+   ```python
+   from openclaw.skills.monitoring import EnhancedTelegramBot
+   from openclaw.core.portfolio_manager import PortfolioManager
+   from openclaw.skills.execution.position_tracker import PositionTracker
+   
+   # Initialize components
+   tracker = PositionTracker(initial_capital=100000.0)
+   portfolio = PortfolioManager(tracker)
+   
+   # Create and start bot
+   bot = EnhancedTelegramBot(
+       token=os.getenv('TELEGRAM_BOT_TOKEN'),
+       chat_id=os.getenv('TELEGRAM_CHAT_ID'),
+       portfolio_manager=portfolio
+   )
+   
+   await bot.start()
+   ```
+
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Welcome message with command list |
+| `/stocks` | View Korean stocks with real-time names |
+| `/crypto` | View cryptocurrencies with real-time names |
+| `/positions` | View all positions with full asset details |
+| `/portfolio` | Portfolio breakdown (stocks vs crypto) |
+| `/recommend` | AI stock recommendations |
+| `/recommend_crypto` | AI cryptocurrency recommendations |
+| `/buy <symbol> <qty> <price>` | Record manual buy transaction |
+| `/sell <symbol> <qty> <price>` | Record manual sell transaction |
+| `/trades` | View trading history with full names |
+
+### Usage Examples
+
+**Korean Stocks:**
+```
+/stocks
+```
+Output:
+```
+📈 모니터링 중인 한국 주식
+
+🟢 **005930.KS** (Samsung Electronics Co., Ltd.)
+   가격: ₩73,500 (+2.15%)
+   수량: 10주
+   평가액: ₩735,000
+```
+
+**Cryptocurrency:**
+```
+/crypto
+```
+Output:
+```
+🪙 모니터링 중인 암호화폐
+
+🟢 **KRW-BTC** (Bitcoin)
+   가격: ₩60,250,000 (+3.24%)
+   수량: 0.5000
+   평가액: ₩30,125,000
+```
+
+**Portfolio Breakdown:**
+```
+/portfolio
+```
+Output:
+```
+💼 포트폴리오 현황
+
+📈 **한국 주식** (3개)
+   평가액: ₩15,000,000
+   투자금: ₩14,200,000
+   수익률: +5.63%
+
+🪙 **암호화폐** (2개)
+   평가액: ₩30,125,000
+   투자금: ₩29,000,000
+   수익률: +3.88%
+
+💰 **전체 포트폴리오**
+   총 평가액: ₩45,125,000
+   보유 현금: ₩50,000,000
+   총 투자금: ₩43,200,000
+   총 수익률: +4.46%
+```
+
+**Natural Language Support:**
+
+Users can interact naturally in Korean or English:
+```
+나는 0.5 BTC를 60,000,000원에 샀어
+→ Bot will parse and record the transaction
+
+위 추천 암호화폐
+→ Bot will provide crypto recommendations
+
+포트폴리오 보여줘
+→ Bot will show portfolio breakdown
+```
+
+**AI Recommendations:**
+```
+/recommend
+```
+Output:
+```
+🤖 **AI 종목 추천**
+
+1. **005930.KS** (삼성전자)
+   진입가: ₩72,000-73,000
+   목표가: ₩78,000
+   손절가: ₩70,000
+   분석: 반도체 업황 개선 기대. 중장기 상승 전망.
+
+2. **035420.KS** (NAVER)
+   진입가: ₩195,000-198,000
+   목표가: ₩210,000
+   손절가: ₩190,000
+   분석: AI 서비스 확대로 성장 기대.
+
+3. **000660.KS** (SK하이닉스)
+   진입가: ₩145,000-148,000
+   목표가: ₩160,000
+   손절가: ₩140,000
+   분석: HBM 수요 증가로 실적 개선 예상.
+```
+
+### Interactive Features
+
+When trading signals are sent, users can click:
+- ✅ **즉시 체결** - Execute the trade immediately
+- ❌ **무시** - Ignore the signal
+
+Example:
+```python
+# Send interactive trade signal
+await bot.send_trade_signal(
+    symbol='005930.KS',
+    action='BUY',
+    price=73500,
+    reason='Strong breakout above resistance with high volume'
+)
+```
+
+Output in Telegram:
+```
+🟢 **거래 시그널**
+
+종목: 005930.KS (Samsung Electronics Co., Ltd.)
+액션: BUY
+가격: ₩73,500
+
+분석:
+Strong breakout above resistance with high volume
+
+[✅ 즉시 체결] [❌ 무시]
+```
+
+### API Rate Limits
+
+The bot implements intelligent caching to minimize API calls:
+
+- **Yahoo Finance**: No strict limits, reasonable delays
+- **CoinGecko**: 10-50 requests/minute (free tier)
+- **Redis Caching**: 24-hour TTL for asset names
+- **Cache Hit Rate**: Expected 90%+ after warm-up
+
+### Error Handling
+
+The bot includes comprehensive error handling:
+
+1. **API Failures**: Falls back to local mappings
+2. **Unknown Assets**: Returns "Unknown Asset (SYMBOL)"
+3. **LLM Unavailable**: Clear message about configuration
+4. **Network Issues**: Automatic retry with backoff
+5. **Invalid Commands**: Helpful error messages
+
+All errors are logged for debugging while providing user-friendly messages.
+
 ## 🔒 Security & Safety
 
 ### Security Measures
