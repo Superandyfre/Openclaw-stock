@@ -73,10 +73,10 @@ class TestAIModels:
     
     def test_ai_manager_initialization(self):
         """Test AI manager can be initialized"""
-        from openclaw.skills.analysis.ai_models import AIModelManager
+        from openclaw.skills.analysis.ai_models import AIModels
         
         # Should initialize without API keys for testing
-        manager = AIModelManager()
+        manager = AIModels()
         
         # Check basic properties
         assert hasattr(manager, 'models')
@@ -86,9 +86,9 @@ class TestAIModels:
     
     def test_model_routing_logic(self):
         """Test intelligent model routing (dual-model architecture)"""
-        from openclaw.skills.analysis.ai_models import AIModelManager
+        from openclaw.skills.analysis.ai_models import AIModels
         
-        manager = AIModelManager()
+        manager = AIModels()
         
         # Test routing for normal scenario (should always choose gemini)
         context = {
@@ -112,9 +112,9 @@ class TestAIModels:
     
     def test_news_deduplication(self):
         """Test news deduplication"""
-        from openclaw.skills.analysis.ai_models import AIModelManager
+        from openclaw.skills.analysis.ai_models import AIModels
         
-        manager = AIModelManager()
+        manager = AIModels()
         
         # Create duplicate news
         news = [
@@ -128,9 +128,9 @@ class TestAIModels:
     
     def test_news_relevance_scoring(self):
         """Test news relevance scoring"""
-        from openclaw.skills.analysis.ai_models import AIModelManager
+        from openclaw.skills.analysis.ai_models import AIModels
         
-        manager = AIModelManager()
+        manager = AIModels()
         
         news = [
             {
@@ -148,9 +148,9 @@ class TestAIModels:
     
     def test_model_statistics(self):
         """Test model usage statistics (dual-model architecture)"""
-        from openclaw.skills.analysis.ai_models import AIModelManager
+        from openclaw.skills.analysis.ai_models import AIModels
         
-        manager = AIModelManager()
+        manager = AIModels()
         
         stats = manager.get_model_statistics()
         

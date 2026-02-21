@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+"""
+Gemini 模型智能管理器 (2026版)
+根据任务类型自动选择最合适的模型，配额耗尽时自动降级
+降级链：gemini-2.0-flash → gemini-1.5-flash → gemini-2.0-flash-lite → DeepSeek
+"""
+import os
+import asyncio
+from typing import Optional, Literal
+from loguru import logger
+
+try:
+    import google.generativeai as genai
+    GENAI_AVAILABLE = True
+except ImportError:
+    GENAI_AVAILABLE = False
+    logger.warning("Google AI 未安装")
+
+try:
+    from openai import OpenAI as OpenAIClient
+    OPENAI_SDK_AVAILABLE = True
+except ImportError:
+    OPENAI_SDK_AVAILABLE = False
+
+try:
+    from groq import Groq as GroqClient
+    GROQ_SDK_AVAILABLE = True
+except ImportError:
+    GROQ_SDK_AVAILABLE = False
+
+
+TaskType = Literal[
+    'lightweight',      # 轻量任务：公告标题初筛、简单问答
+    'standard',         # 标准任务：日常监控、一般推荐
+    'complex',          # 复杂任务：深度分析、策略研判
+    'experimental'      # 实验任务：前沿功能测试
+]
+
+
+class GeminiModelManager:
+    """Gemini模型智能管理器（含自动降级链）"""
+
+    # 免费tier实际每日配额（2026年2月）：
+    #   gemini-2.5-flash: 20次/天
+    #   gemini-2.0-flash: 1500次/天（但每个API key共享，今天已耗尽则0）
+    #   gemini-2.0-flash-lite: 1500次/天
+    #   gemini-1.5-flash: 1500次/天（单独配额，不与2.0共享）
+
+    # 降级链：配额/不可用时按顺序尝试，直到有一个成功
+    FALLBACK_CHAIN = [
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-lite',
+    ]
+
+    MODEL_CONFIG = {
+        'lightweight': {
+            'name': 'gemini-2.0-flash-lite',
+            'description': '轻量级模型，配额充足',
+            'use_cases': ['公告标题筛选', '简单问答', '关键词提取'],
+            'quota': '免费: 1500次/天'
+        },
+        'standard': {
+            'name': 'gemini-2.0-flash',
+            'description': 'Gemini 2.0 Flash，日常对话主力模型',
+            'use_cases': ['日常盯盘', '一般推荐', '情感分析', '自然语言理解'],
+            'quota': '免费: 1500次/天'
+        },
+        'complex': {
+            'name': 'gemini-2.5-flash',
+            'description': 'Gemini 2.5 Flash，深度分析（配额有限）',
+            'use_cases': ['深度市场分析', '交易策略判断', '风险评估', '长文本研报分析'],
+            'quota': '免费: 20次/天'
+        },
+        'experimental': {
+            'name': 'gemini-2.0-flash',
+            'description': '实验性功能，使用2.0 Flash',
+            'use_cases': ['前沿功能测试', '极长上下文处理'],
+            'quota': '免费: 1500次/天'
+        }
+    }
+    
+    def __init__(self, api_key: Optional[str] = None, default_task_type: TaskType = 'standard'):
+        """
+        初始化模型管理器
+
+        Args:
+            api_key: Google AI API密钥
+            default_task_type: 默认任务类型
+        """
+        self.api_key = api_key or os.getenv('GOOGLE_AI_API_KEY')
+        self.default_task_type = default_task_type
+        self.models = {}
+        self.current_model = None
+        self.deepseek_client = None
+        self.groq_client = None
+
+        if not GENAI_AVAILABLE:
+            logger.error("Google AI SDK 未安装")
+            return
+
+        if not self.api_key:
+            logger.error("GOOGLE_AI_API_KEY 未设置")
+            return
+
+        # 配置 Gemini API
+        try:
+            genai.configure(api_key=self.api_key)
+            logger.info("✅ Gemini API 配置成功")
+        except Exception as e:
+            logger.error(f"配置Gemini API失败: {e}")
+            return
+
+        # 初始化 Groq 客户端（lightweight 首选，~0.5s 延迟）
+        groq_key = os.getenv('GROQ_API_KEY')
+        if groq_key and GROQ_SDK_AVAILABLE:
+            try:
+                self.groq_client = GroqClient(api_key=groq_key)
+                logger.info("✅ Groq 客户端初始化成功（lightweight 路由首选）")
+            except Exception as e:
+                logger.warning(f"Groq 初始化失败: {e}")
+        elif groq_key and not GROQ_SDK_AVAILABLE:
+            logger.warning("⚠️ groq 包未安装（pip install groq），跳过 Groq")
+        else:
+            logger.info("ℹ️ GROQ_API_KEY 未设置，跳过 Groq")
+
+        # 初始化 DeepSeek 备用客户端
+        deepseek_key = os.getenv('DEEPSEEK_API_KEY')
+        if deepseek_key and OPENAI_SDK_AVAILABLE:
+            try:
+                self.deepseek_client = OpenAIClient(
+                    api_key=deepseek_key,
+                    base_url='https://api.deepseek.com'
+                )
+                logger.info("✅ DeepSeek 备用客户端初始化成功")
+            except Exception as e:
+                logger.warning(f"DeepSeek 初始化失败: {e}")
+        elif not deepseek_key:
+            logger.info("ℹ️ DEEPSEEK_API_KEY 未设置，跳过DeepSeek备用")
+        elif not OPENAI_SDK_AVAILABLE:
+            logger.warning("⚠️ openai 包未安装，无法使用DeepSeek备用（pip install openai）")
+
+        # 预加载默认模型
+        self.get_model(default_task_type)
+    
+    def get_model(self, task_type: TaskType = None):
+        """
+        获取指定任务类型的模型
+        
+        Args:
+            task_type: 任务类型，如果为None则使用默认类型
+        
+        Returns:
+            GenerativeModel实例
+        """
+        if not GENAI_AVAILABLE or not self.api_key:
+            return None
+        
+        task_type = task_type or self.default_task_type
+        
+        # 如果模型已缓存，直接返回
+        if task_type in self.models:
+            self.current_model = self.models[task_type]
+            return self.current_model
+        
+        # 创建新模型
+        try:
+            config = self.MODEL_CONFIG[task_type]
+            model_name = config['name']
+            
+            model = genai.GenerativeModel(model_name)
+            self.models[task_type] = model
+            self.current_model = model
+            
+            logger.info(f"✅ 加载Gemini模型: {model_name} ({config['description']})")
+            return model
+            
+        except Exception as e:
+            logger.error(f"加载模型失败 ({task_type}): {e}")
+            
+            # 降级策略：尝试使用标准模型
+            if task_type != 'standard':
+                logger.warning(f"降级到标准模型")
+                return self.get_model('standard')
+            
+            return None
+    
+    def _get_model_by_name(self, model_name: str):
+        """按模型名称获取或创建模型实例"""
+        if model_name not in self.models:
+            try:
+                self.models[model_name] = genai.GenerativeModel(model_name)
+            except Exception as e:
+                logger.error(f"创建模型 {model_name} 失败: {e}")
+                return None
+        return self.models[model_name]
+
+    async def _call_groq(self, prompt: str, model: str = 'llama-3.3-70b-versatile') -> Optional[str]:
+        """调用 Groq LPU 推理（极低延迟，~0.5s）"""
+        if not self.groq_client:
+            return None
+        def _sync():
+            resp = self.groq_client.chat.completions.create(
+                model=model,
+                messages=[{'role': 'user', 'content': prompt}],
+                max_tokens=512,
+                temperature=0.3,
+            )
+            return resp.choices[0].message.content.strip()
+        try:
+            text = await asyncio.to_thread(_sync)
+            logger.info(f"✅ Groq ({model}) 响应成功")
+            return text
+        except Exception as e:
+            logger.warning(f"⚠️ Groq 调用失败: {e}")
+            return None
+
+    async def generate_with_fallback(self, prompt: str, task_type: TaskType = 'standard') -> Optional[str]:
+        """
+        调用LLM，配额耗尽时自动按降级链切换模型重试。
+        lightweight → Groq 优先（最快），再 Gemini 链
+        standard/complex → Gemini 优先，Groq 作备用，最后 DeepSeek
+        返回文本内容，失败返回 None。
+        """
+        primary = self.MODEL_CONFIG.get(task_type, {}).get('name', 'gemini-2.0-flash')
+
+        # ── lightweight：Groq 优先（延迟最低）──
+        if task_type == 'lightweight' and self.groq_client:
+            text = await self._call_groq(prompt)
+            if text:
+                return text
+            logger.warning("⚠️ Groq 失败，降级到 Gemini...")
+
+        # 构建本次尝试顺序：primary 优先，再走通用降级链（去重）
+        chain = [primary] + [m for m in self.FALLBACK_CHAIN if m != primary]
+
+        for model_name in chain:
+            model = self._get_model_by_name(model_name)
+            if not model:
+                continue
+            try:
+                response = await asyncio.to_thread(model.generate_content, prompt)
+                if model_name != primary:
+                    logger.warning(f"⚠️ 已降级使用: {model_name}")
+                else:
+                    logger.info(f"✅ 使用模型: {model_name}")
+                return response.text.strip()
+            except Exception as e:
+                err = str(e)
+                if '429' in err or '404' in err or 'quota' in err.lower() or 'RESOURCE_EXHAUSTED' in err or 'not found' in err.lower():
+                    logger.warning(f"⚠️ {model_name} 不可用（{err[:60]}），尝试下一个模型...")
+                    continue
+                else:
+                    logger.error(f"模型 {model_name} 调用失败（非配额问题）: {e}")
+                    raise
+
+        # ── standard/complex：所有 Gemini 失败，尝试 Groq 兜底 ──
+        if task_type != 'lightweight' and self.groq_client:
+            logger.warning("⚠️ 所有Gemini耗尽，切换到 Groq 备用...")
+            text = await self._call_groq(prompt)
+            if text:
+                return text
+
+        # ── 所有 Gemini 模型均失败，尝试 DeepSeek 兜底 ──
+        if self.deepseek_client:
+            logger.warning("⚠️ 所有Gemini配额耗尽，切换到 DeepSeek 备用...")
+            try:
+                def _call_deepseek():
+                    resp = self.deepseek_client.chat.completions.create(
+                        model='deepseek-chat',
+                        messages=[{'role': 'user', 'content': prompt}],
+                        max_tokens=1024
+                    )
+                    return resp.choices[0].message.content.strip()
+
+                text = await asyncio.to_thread(_call_deepseek)
+                logger.info("✅ DeepSeek 响应成功")
+                return text
+            except Exception as e:
+                err = str(e)
+                if '402' in err or 'Insufficient Balance' in err:
+                    logger.error("❌ DeepSeek 余额不足（请到 platform.deepseek.com 充值）")
+                elif '401' in err:
+                    logger.error("❌ DeepSeek API Key 无效")
+                else:
+                    logger.error(f"❌ DeepSeek 调用失败: {e}")
+
+        logger.error("❌ 所有AI模型均不可用")
+        return None
+
+    def switch_to(self, task_type: TaskType):
+        """
+        切换到指定任务类型的模型
+
+        Args:
+            task_type: 任务类型
+
+        Returns:
+            GenerativeModel实例
+        """
+        return self.get_model(task_type)
+    
+    def get_model_info(self, task_type: TaskType = None) -> dict:
+        """获取模型信息"""
+        task_type = task_type or self.default_task_type
+        return self.MODEL_CONFIG.get(task_type, {})
+    
+    def list_available_models(self):
+        """列出所有可用的模型配置"""
+        logger.info("\n📋 可用的Gemini模型配置：\n")
+        
+        for task_type, config in self.MODEL_CONFIG.items():
+            logger.info(f"🔹 {task_type.upper()}")
+            logger.info(f"   模型: {config['name']}")
+            logger.info(f"   描述: {config['description']}")
+            logger.info(f"   用途: {', '.join(config['use_cases'])}")
+            logger.info("")
+
+
+# 便捷函数
+def get_lightweight_model(api_key: Optional[str] = None):
+    """获取轻量级模型（最省钱）"""
+    manager = GeminiModelManager(api_key, default_task_type='lightweight')
+    return manager.current_model
+
+
+def get_standard_model(api_key: Optional[str] = None):
+    """获取标准模型（日常使用）"""
+    manager = GeminiModelManager(api_key, default_task_type='standard')
+    return manager.current_model
+
+
+def get_complex_model(api_key: Optional[str] = None):
+    """获取复杂分析模型（深度推理）"""
+    manager = GeminiModelManager(api_key, default_task_type='complex')
+    return manager.current_model
+
+
+def get_experimental_model(api_key: Optional[str] = None):
+    """获取实验模型（最新技术）"""
+    manager = GeminiModelManager(api_key, default_task_type='experimental')
+    return manager.current_model
+
+
+if __name__ == '__main__':
+    # 测试
+    manager = GeminiModelManager()
+    manager.list_available_models()
+    
+    # 测试获取不同模型
+    print("\n测试模型切换：")
+    
+    for task_type in ['lightweight', 'standard', 'complex']:
+        model = manager.get_model(task_type)
+        if model:
+            print(f"✅ {task_type}: {model.model_name}")
+        else:
+            print(f"❌ {task_type}: 加载失败")

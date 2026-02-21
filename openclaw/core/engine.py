@@ -23,7 +23,7 @@ from ..skills.data_collection import (
     AnnouncementMonitor
 )
 from ..skills.analysis import (
-    AIModelManager,
+    AIModels,
     TechnicalAnalysis,
     SentimentAnalysis,
     RiskManagement,
@@ -61,7 +61,7 @@ class OpenClawEngine:
         # Initialize components
         self.scheduler = Scheduler()
         self.db = DatabaseManager()
-        self.ai_models = AIModelManager()
+        self.ai_models = AIModels()
         self.technical_analysis = TechnicalAnalysis()
         self.sentiment_analysis = SentimentAnalysis()
         self.risk_manager = RiskManagement(self.risk_config['risk_management'])

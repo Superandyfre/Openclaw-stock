@@ -34,10 +34,13 @@ python-telegram-bot==21.9  # Updated to latest stable version
 pytest==8.3.4  # Updated to latest stable version
 pytest-asyncio==0.24.0  # Updated to latest version
 
-# 2026 LLM Integration (Dual-Model Architecture)
-google-generativeai>=0.8.0  # Gemini 3 Flash (primary)
+# 2026 LLM Integration (Multi-Model Architecture)
+google-genai>=0.8.0  # Gemini 3 Flash (primary)
 openai>=1.50.0              # DeepSeek-R1 compatibility (emergency backup)
+groq>=0.11.0                # Groq LPU (lightweight首选，~0.5s延迟)
 
 # Global News Aggregation
 feedparser>=6.0.10          # RSS feed parsing
 python-dateutil>=2.8.2      # Date/time parsing
+pyupbit>=0.2.28
+pybithumb>=1.0.20

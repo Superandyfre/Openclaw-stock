@@ -1,0 +1,718 @@
+{
+  "timestamp": "2026-02-19T14:38:11.006002",
+  "telegram": [
+    {
+      "channel": "whale_alert",
+      "channel_name": "巨鲸转账告警",
+      "timestamp": "2026-02-19T14:38:11.006276",
+      "message_count": 10,
+      "keyword_mentions": {
+        "BTC": 1,
+        "ETH": 1,
+        "USDT": 0,
+        "transferred": 1,
+        "whale": 1
+      },
+      "influencer_mentions": {
+        "gary_gensler": 1
+      },
+      "sentiment": {
+        "score": -1.0,
+        "label": "BEARISH",
+        "positive_signals": 0,
+        "negative_signals": 2
+      },
+      "engagement": {
+        "total_views": 137632,
+        "total_forwards": 2550,
+        "avg_views": 13763.2,
+        "avg_forwards": 255.0
+      },
+      "top_messages": [
+        {
+          "text": "Regulatory concerns mount as governments discuss crypto taxation",
+          "views": 6223,
+          "forwards": 436
+        },
+        {
+          "text": "New DeFi protocol launches with innovative yield farming mechanism",
+          "views": 8669,
+          "forwards": 426
+        },
+        {
+          "text": "Regulatory concerns mount as governments discuss crypto taxation",
+          "views": 13240,
+          "forwards": 397
+        }
+      ]
+    },
+    {
+      "channel": "cointelegraph",
+      "channel_name": "CoinTelegraph新闻",
+      "timestamp": "2026-02-19T14:38:13.008826",
+      "message_count": 10,
+      "keyword_mentions": {
+        "Bitcoin": 5,
+        "Ethereum": 2,
+        "crypto": 3,
+        "market": 3,
+        "price": 0
+      },
+      "influencer_mentions": {
+        "vitalik": 2,
+        "gary_gensler": 1
+      },
+      "sentiment": {
+        "score": 0.3333333333333333,
+        "label": "BULLISH",
+        "positive_signals": 4,
+        "negative_signals": 2
+      },
+      "engagement": {
+        "total_views": 199433,
+        "total_forwards": 2242,
+        "avg_views": 19943.3,
+        "avg_forwards": 224.2
+      },
+      "top_messages": [
+        {
+          "text": "Crypto market sees $1B in liquidations as Bitcoin drops 5% in hours",
+          "views": 23165,
+          "forwards": 427
+        },
+        {
+          "text": "Vitalik Buterin presents new Ethereum roadmap at developer conference",
+          "views": 44537,
+          "forwards": 420
+        },
+        {
+          "text": "Crypto market sees $1B in liquidations as Bitcoin drops 5% in hours",
+          "views": 29043,
+          "forwards": 406
+        }
+      ]
+    },
+    {
+      "channel": "coindesk",
+      "channel_name": "CoinDesk新闻",
+      "timestamp": "2026-02-19T14:38:15.012440",
+      "message_count": 10,
+      "keyword_mentions": {
+        "Bitcoin": 2,
+        "Ethereum": 2,
+        "regulation": 0,
+        "adoption": 1
+      },
+      "influencer_mentions": {
+        "vitalik": 1
+      },
+      "sentiment": {
+        "score": 0.3333333333333333,
+        "label": "BULLISH",
+        "positive_signals": 2,
+        "negative_signals": 1
+      },
+      "engagement": {
+        "total_views": 269853,
+        "total_forwards": 2114,
+        "avg_views": 26985.3,
+        "avg_forwards": 211.4
+      },
+      "top_messages": [
+        {
+          "text": "New DeFi protocol launches with innovative yield farming mechanism",
+          "views": 33048,
+          "forwards": 365
+        },
+        {
+          "text": "Binance announces new trading pairs and zero-fee promotion",
+          "views": 24713,
+          "forwards": 296
+        },
+        {
+          "text": "Bitcoin surges past $67,000 as institutional adoption accelerates 🚀",
+          "views": 42599,
+          "forwards": 278
+        }
+      ]
+    },
+    {
+      "channel": "binance_announcements",
+      "channel_name": "Binance官方公告",
+      "timestamp": "2026-02-19T14:38:17.015510",
+      "message_count": 10,
+      "keyword_mentions": {
+        "listing": 0,
+        "delisting": 0,
+        "maintenance": 0,
+        "promotion": 0
+      },
+      "influencer_mentions": {
+        "michael_saylor": 1
+      },
+      "sentiment": {
+        "score": -1.0,
+        "label": "BEARISH",
+        "positive_signals": 0,
+        "negative_signals": 1
+      },
+      "engagement": {
+        "total_views": 263862,
+        "total_forwards": 3253,
+        "avg_views": 26386.2,
+        "avg_forwards": 325.3
+      },
+      "top_messages": [
+        {
+          "text": "Crypto market sees $1B in liquidations as Bitcoin drops 5% in hours",
+          "views": 3366,
+          "forwards": 474
+        },
+        {
+          "text": "Ethereum network upgrade scheduled for next week - major scalability improvements expected",
+          "views": 8468,
+          "forwards": 441
+        },
+        {
+          "text": "Whale Alert: 1,000 BTC transferred from unknown wallet to Binance",
+          "views": 25952,
+          "forwards": 417
+        }
+      ]
+    },
+    {
+      "channel": "crypto_news_official",
+      "channel_name": "加密新闻聚合",
+      "timestamp": "2026-02-19T14:38:19.018258",
+      "message_count": 10,
+      "keyword_mentions": {
+        "Bitcoin": 3,
+        "Ethereum": 1,
+        "altcoin": 0,
+        "DeFi": 1,
+        "NFT": 0
+      },
+      "influencer_mentions": {
+        "michael_saylor": 2,
+        "gary_gensler": 2
+      },
+      "sentiment": {
+        "score": 1.0,
+        "label": "BULLISH",
+        "positive_signals": 2,
+        "negative_signals": 0
+      },
+      "engagement": {
+        "total_views": 367006,
+        "total_forwards": 2328,
+        "avg_views": 36700.6,
+        "avg_forwards": 232.8
+      },
+      "top_messages": [
+        {
+          "text": "Michael Saylor's MicroStrategy purchases additional 500 BTC",
+          "views": 47107,
+          "forwards": 449
+        },
+        {
+          "text": "SEC delays decision on Bitcoin ETF approval - market sentiment turns cautious",
+          "views": 16039,
+          "forwards": 397
+        },
+        {
+          "text": "Regulatory concerns mount as governments discuss crypto taxation",
+          "views": 34699,
+          "forwards": 304
+        }
+      ]
+    }
+  ],
+  "reddit": [
+    {
+      "subreddit": "CryptoCurrency",
+      "subreddit_name": "加密货币综合",
+      "members": "7.5M+",
+      "timestamp": "2026-02-19T14:38:21.022622",
+      "post_count": 20,
+      "keyword_mentions": {
+        "Bitcoin": 5,
+        "Ethereum": 6,
+        "altcoin": 6,
+        "trading": 0,
+        "HODL": 0
+      },
+      "influencer_mentions": {
+        "michael_saylor": 1
+      },
+      "sentiment": {
+        "score": 1.0,
+        "label": "BULLISH",
+        "bullish_signals": 1,
+        "bearish_signals": 0
+      },
+      "engagement": {
+        "total_score": 56146,
+        "total_comments": 4830,
+        "avg_score": 2807.3,
+        "avg_comments": 241.5,
+        "avg_upvote_ratio": 0.841231519040484
+      },
+      "trend": "UNKNOWN",
+      "top_posts": [
+        {
+          "title": "PSA: Don't FOMO into altcoins at ATH, learned the hard way",
+          "score": 4978,
+          "comments": 437,
+          "upvote_ratio": 0.707324566909987
+        },
+        {
+          "title": "Bitcoin just broke $67k! Is this the start of the bull run? 🚀",
+          "score": 4946,
+          "comments": 354,
+          "upvote_ratio": 0.8643097916879765
+        },
+        {
+          "title": "SEC delays Bitcoin ETF decision again - thoughts?",
+          "score": 4381,
+          "comments": 80,
+          "upvote_ratio": 0.7229429156292344
+        },
+        {
+          "title": "Ethereum gas fees are finally down to reasonable levels",
+          "score": 4339,
+          "comments": 243,
+          "upvote_ratio": 0.7257611008228755
+        },
+        {
+          "title": "Unpopular opinion: Most altcoins won't survive the next bear market",
+          "score": 4156,
+          "comments": 384,
+          "upvote_ratio": 0.958447401143075
+        }
+      ]
+    },
+    {
+      "subreddit": "Bitcoin",
+      "subreddit_name": "比特币",
+      "members": "6.0M+",
+      "timestamp": "2026-02-19T14:38:23.023811",
+      "post_count": 20,
+      "keyword_mentions": {
+        "BTC": 7,
+        "mining": 0,
+        "Lightning": 0,
+        "halving": 0,
+        "adoption": 0
+      },
+      "influencer_mentions": {
+        "michael_saylor": 2,
+        "vitalik": 1
+      },
+      "sentiment": {
+        "score": 0.3333333333333333,
+        "label": "BULLISH",
+        "bullish_signals": 2,
+        "bearish_signals": 1
+      },
+      "engagement": {
+        "total_score": 52957,
+        "total_comments": 4551,
+        "avg_score": 2647.85,
+        "avg_comments": 227.55,
+        "avg_upvote_ratio": 0.8322381200876363
+      },
+      "trend": "UNKNOWN",
+      "top_posts": [
+        {
+          "title": "Chart analysis: BTC might test $70k resistance soon",
+          "score": 4833,
+          "comments": 59,
+          "upvote_ratio": 0.9552600227353761
+        },
+        {
+          "title": "Michael Saylor's MicroStrategy buys another 500 BTC",
+          "score": 4777,
+          "comments": 485,
+          "upvote_ratio": 0.9597476989856923
+        },
+        {
+          "title": "Ethereum gas fees are finally down to reasonable levels",
+          "score": 4514,
+          "comments": 150,
+          "upvote_ratio": 0.7883144429125285
+        },
+        {
+          "title": "Chart analysis: BTC might test $70k resistance soon",
+          "score": 4502,
+          "comments": 404,
+          "upvote_ratio": 0.8754542870072719
+        },
+        {
+          "title": "SEC delays Bitcoin ETF decision again - thoughts?",
+          "score": 4290,
+          "comments": 359,
+          "upvote_ratio": 0.7167365054167224
+        }
+      ]
+    },
+    {
+      "subreddit": "ethtrader",
+      "subreddit_name": "以太坊交易",
+      "members": "1.5M+",
+      "timestamp": "2026-02-19T14:38:25.024870",
+      "post_count": 20,
+      "keyword_mentions": {
+        "ETH": 4,
+        "DeFi": 0,
+        "gas": 2,
+        "Layer2": 0,
+        "staking": 0
+      },
+      "influencer_mentions": {
+        "michael_saylor": 1,
+        "vitalik": 2
+      },
+      "sentiment": {
+        "score": -0.3333333333333333,
+        "label": "BEARISH",
+        "bullish_signals": 1,
+        "bearish_signals": 2
+      },
+      "engagement": {
+        "total_score": 51818,
+        "total_comments": 5367,
+        "avg_score": 2590.9,
+        "avg_comments": 268.35,
+        "avg_upvote_ratio": 0.8664805729079419
+      },
+      "trend": "UNKNOWN",
+      "top_posts": [
+        {
+          "title": "Vitalik's new Ethereum roadmap looks promising",
+          "score": 4799,
+          "comments": 130,
+          "upvote_ratio": 0.8340907363402419
+        },
+        {
+          "title": "Bitcoin just broke $67k! Is this the start of the bull run? 🚀",
+          "score": 4504,
+          "comments": 63,
+          "upvote_ratio": 0.844763612406916
+        },
+        {
+          "title": "Bitcoin just broke $67k! Is this the start of the bull run? 🚀",
+          "score": 4253,
+          "comments": 466,
+          "upvote_ratio": 0.9185259578460044
+        },
+        {
+          "title": "Ethereum gas fees are finally down to reasonable levels",
+          "score": 3961,
+          "comments": 278,
+          "upvote_ratio": 0.9181523988702991
+        },
+        {
+          "title": "PSA: Don't FOMO into altcoins at ATH, learned the hard way",
+          "score": 3948,
+          "comments": 250,
+          "upvote_ratio": 0.706753536999734
+        }
+      ]
+    },
+    {
+      "subreddit": "wallstreetbets",
+      "subreddit_name": "华尔街赌场",
+      "members": "16M+",
+      "timestamp": "2026-02-19T14:38:27.027136",
+      "post_count": 20,
+      "keyword_mentions": {
+        "crypto": 5,
+        "Bitcoin": 6,
+        "moon": 0,
+        "diamond hands": 0,
+        "YOLO": 0
+      },
+      "influencer_mentions": {
+        "michael_saylor": 1
+      },
+      "sentiment": {
+        "score": -0.6666666666666666,
+        "label": "BEARISH",
+        "bullish_signals": 1,
+        "bearish_signals": 5
+      },
+      "engagement": {
+        "total_score": 57187,
+        "total_comments": 3450,
+        "avg_score": 2859.35,
+        "avg_comments": 172.5,
+        "avg_upvote_ratio": 0.85162158230516
+      },
+      "trend": "UNKNOWN",
+      "top_posts": [
+        {
+          "title": "Ethereum gas fees are finally down to reasonable levels",
+          "score": 4937,
+          "comments": 96,
+          "upvote_ratio": 0.8887196708403353
+        },
+        {
+          "title": "Unpopular opinion: Most altcoins won't survive the next bear market",
+          "score": 4934,
+          "comments": 135,
+          "upvote_ratio": 0.8694986057190333
+        },
+        {
+          "title": "Warning: New scam targeting crypto holders on social media",
+          "score": 4832,
+          "comments": 245,
+          "upvote_ratio": 0.9597090509597487
+        },
+        {
+          "title": "Chart analysis: BTC might test $70k resistance soon",
+          "score": 4770,
+          "comments": 91,
+          "upvote_ratio": 0.9593595553320087
+        },
+        {
+          "title": "Warning: New scam targeting crypto holders on social media",
+          "score": 4569,
+          "comments": 33,
+          "upvote_ratio": 0.8471814579787792
+        }
+      ]
+    },
+    {
+      "subreddit": "CryptoMarkets",
+      "subreddit_name": "加密市场",
+      "members": "2.5M+",
+      "timestamp": "2026-02-19T14:38:29.028697",
+      "post_count": 20,
+      "keyword_mentions": {
+        "trading": 0,
+        "TA": 12,
+        "chart": 3,
+        "support": 0,
+        "resistance": 3
+      },
+      "influencer_mentions": {
+        "michael_saylor": 3,
+        "vitalik": 2
+      },
+      "sentiment": {
+        "score": 0.0,
+        "label": "NEUTRAL",
+        "bullish_signals": 3,
+        "bearish_signals": 3
+      },
+      "engagement": {
+        "total_score": 47376,
+        "total_comments": 4977,
+        "avg_score": 2368.8,
+        "avg_comments": 248.85,
+        "avg_upvote_ratio": 0.8294818346255767
+      },
+      "trend": "UNKNOWN",
+      "top_posts": [
+        {
+          "title": "PSA: Don't FOMO into altcoins at ATH, learned the hard way",
+          "score": 4912,
+          "comments": 329,
+          "upvote_ratio": 0.8031040460079414
+        },
+        {
+          "title": "Ethereum gas fees are finally down to reasonable levels",
+          "score": 4719,
+          "comments": 244,
+          "upvote_ratio": 0.7071620253365445
+        },
+        {
+          "title": "Michael Saylor's MicroStrategy buys another 500 BTC",
+          "score": 4534,
+          "comments": 370,
+          "upvote_ratio": 0.9564402460816558
+        },
+        {
+          "title": "Vitalik's new Ethereum roadmap looks promising",
+          "score": 4216,
+          "comments": 381,
+          "upvote_ratio": 0.8610805564302482
+        },
+        {
+          "title": "Vitalik's new Ethereum roadmap looks promising",
+          "score": 4007,
+          "comments": 146,
+          "upvote_ratio": 0.7665145678065716
+        }
+      ]
+    },
+    {
+      "subreddit": "btc",
+      "subreddit_name": "比特币技术",
+      "members": "400K+",
+      "timestamp": "2026-02-19T14:38:31.030188",
+      "post_count": 20,
+      "keyword_mentions": {
+        "protocol": 0,
+        "node": 0,
+        "blockchain": 0,
+        "development": 0
+      },
+      "influencer_mentions": {
+        "michael_saylor": 1,
+        "vitalik": 2
+      },
+      "sentiment": {
+        "score": -0.3333333333333333,
+        "label": "BEARISH",
+        "bullish_signals": 1,
+        "bearish_signals": 2
+      },
+      "engagement": {
+        "total_score": 45667,
+        "total_comments": 5408,
+        "avg_score": 2283.35,
+        "avg_comments": 270.4,
+        "avg_upvote_ratio": 0.8309997640302518
+      },
+      "trend": "UNKNOWN",
+      "top_posts": [
+        {
+          "title": "PSA: Don't FOMO into altcoins at ATH, learned the hard way",
+          "score": 4947,
+          "comments": 329,
+          "upvote_ratio": 0.7879385174137534
+        },
+        {
+          "title": "SEC delays Bitcoin ETF decision again - thoughts?",
+          "score": 4781,
+          "comments": 60,
+          "upvote_ratio": 0.8386988334874086
+        },
+        {
+          "title": "Just started DCA into Bitcoin, wish me luck!",
+          "score": 4465,
+          "comments": 264,
+          "upvote_ratio": 0.712594485946907
+        },
+        {
+          "title": "Vitalik's new Ethereum roadmap looks promising",
+          "score": 4090,
+          "comments": 91,
+          "upvote_ratio": 0.8342225042776723
+        },
+        {
+          "title": "Ethereum gas fees are finally down to reasonable levels",
+          "score": 4015,
+          "comments": 368,
+          "upvote_ratio": 0.7225324500732433
+        }
+      ]
+    }
+  ],
+  "rss": [
+    {
+      "feed": "michael_saylor",
+      "author": "Michael Saylor",
+      "role": "MicroStrategy CEO",
+      "importance": "HIGH",
+      "importance_score": 0.8,
+      "timestamp": "2026-02-19T14:38:35.320767",
+      "article_count": 5,
+      "keyword_mentions": {
+        "Bitcoin": 1,
+        "MicroStrategy": 0,
+        "digital asset": 0,
+        "store of value": 0
+      },
+      "sentiment": {
+        "score": 0.0,
+        "label": "NEUTRAL",
+        "positive_signals": 1,
+        "negative_signals": 1
+      },
+      "topics": {
+        "Bitcoin": 1,
+        "Ethereum": 1,
+        "DeFi": 1,
+        "NFT": 0,
+        "Regulation": 0,
+        "Technology": 5,
+        "Market": 5
+      },
+      "recent_articles": [
+        {
+          "title": "The Rise of Institutional Crypto Adoption",
+          "summary": "This is a mock article summary for testing purposes. The full content would contain detailed analysis and insights about cryptocurrency markets and te...",
+          "link": "https://example.com/article/0",
+          "published": "2026-02-19T07:38:35.320428"
+        },
+        {
+          "title": "Bitcoin's Role as Digital Gold in the Modern Economy",
+          "summary": "This is a mock article summary for testing purposes. The full content would contain detailed analysis and insights about cryptocurrency markets and te...",
+          "link": "https://example.com/article/1",
+          "published": "2026-02-19T05:38:35.320428"
+        },
+        {
+          "title": "Regulatory Landscape for Cryptocurrencies in 2026",
+          "summary": "This is a mock article summary for testing purposes. The full content would contain detailed analysis and insights about cryptocurrency markets and te...",
+          "link": "https://example.com/article/2",
+          "published": "2026-02-18T18:38:35.320428"
+        },
+        {
+          "title": "Understanding DeFi: Opportunities and Risks",
+          "summary": "This is a mock article summary for testing purposes. The full content would contain detailed analysis and insights about cryptocurrency markets and te...",
+          "link": "https://example.com/article/3",
+          "published": "2026-02-19T12:38:35.320428"
+        },
+        {
+          "title": "The Future of Ethereum: Scaling Solutions and Layer 2 Networks",
+          "summary": "This is a mock article summary for testing purposes. The full content would contain detailed analysis and insights about cryptocurrency markets and te...",
+          "link": "https://example.com/article/4",
+          "published": "2026-02-19T13:38:35.320428"
+        }
+      ]
+    }
+  ],
+  "综合分析": {},
+  "comprehensive_analysis": {
+    "timestamp": "2026-02-19T14:38:51.498951",
+    "overall_sentiment": {
+      "label": "NEUTRAL",
+      "score": -0.027777777777777776,
+      "distribution": {
+        "bullish": 5,
+        "bearish": 5,
+        "neutral": 2
+      }
+    },
+    "influencer_mentions": {
+      "michael_saylor": {
+        "total": 12,
+        "sources": {
+          "telegram": 2,
+          "reddit": 1
+        }
+      },
+      "vitalik": {
+        "total": 10,
+        "sources": {
+          "telegram": 1,
+          "reddit": 2
+        }
+      },
+      "gary_gensler": {
+        "total": 4,
+        "sources": {
+          "telegram": 2
+        }
+      }
+    },
+    "sources_active": {
+      "telegram": 5,
+      "reddit": 6,
+      "rss": 1
+    },
+    "total_data_points": 12
+  }
+}
