@@ -24,9 +24,9 @@ except ImportError:
     SKLEARN_AVAILABLE = False
     logger.warning("Scikit-learn 未安装，异常检测功能受限")
 
-# 尝试导入 Google AI (使用旧版API)
+# 尝试导入 Google AI (使用新版API)
 try:
-    import google.generativeai as genai
+    from google import genai
     GENAI_AVAILABLE = True
     logger.info("✅ Google GenerativeAI 已加载")
 except ImportError:

@@ -272,7 +272,7 @@ class OpenClawTelegramBot:
             elif severity == 'HIGH':
                 prefix = "⚠️⚠️ 风险警告 \n"
             elif severity == 'SUCCESS':
-                prefix = "✅✅ 好消息 \n"
+                prefix = "✅✅ 推荐离场 \n"
             elif severity == 'GOOD_NEWS':
                 prefix = "📈📈 利好通知 \n"
             else:
@@ -878,12 +878,17 @@ class OpenClawTelegramBot:
                 and self.conversation_handler.tracker.positions
             )
             
+            logger.debug(f"📌 检查持仓状态: has_pos={has_pos}, positions={self.conversation_handler.tracker.positions if self.conversation_handler.tracker else None}")
+            
             if not has_pos:
                 # 清仓：取消置顶
                 # 确保当前聊天也在扫描列表内（兼容机器人重启后内存丢失的场景）
+                current_chat_id = str(update.effective_chat.id)
                 _unpin_targets = list(dict.fromkeys(
-                    list(self.broadcast_ids) + [str(update.effective_chat.id)]
+                    list(self.broadcast_ids) + [current_chat_id]
                 ))
+                logger.info(f"📌 持仓已清空，准备取消置顶。targets={_unpin_targets}, _pinned_msg_ids={self._pinned_msg_ids}")
+                
                 for cid in _unpin_targets:
                     mid = self._pinned_msg_ids.pop(cid, None)
                     if mid is not None:
@@ -898,13 +903,20 @@ class OpenClawTelegramBot:
                             except Exception as _de:
                                 logger.warning(f"删除置顶消息也失败 cid={cid}: {_de}")
                     else:
-                        # 没有记录的消息ID → 强制取消该聊天所有置顶（兜底）
-                        logger.info(f"📌 _pinned_msg_ids无记录，对 cid={cid} 执行 unpin_all 兜底")
+                        # 没有记录的消息ID → 兜底方案
+                        logger.info(f"📌 _pinned_msg_ids无记录 cid={cid}，尝试多种方式取消置顶")
                         try:
-                            await self.app.bot.unpin_all_chat_messages(chat_id=cid)
-                            logger.info(f"📌 已取消 cid={cid} 全部置顶")
-                        except Exception as _upa:
-                            logger.warning(f"unpin_all 失败 cid={cid}: {_upa}")
+                            # 私聊中：unpin_chat_message() 不传 message_id 会取消当前置顶的消息
+                            await self.app.bot.unpin_chat_message(chat_id=cid)
+                            logger.info(f"📌 已取消 cid={cid} 当前置顶消息（无message_id方式）")
+                        except Exception as _upe1:
+                            logger.debug(f"unpin_chat_message(无mid)失败: {_upe1}")
+                            # 群组中：使用 unpin_all
+                            try:
+                                await self.app.bot.unpin_all_chat_messages(chat_id=cid)
+                                logger.info(f"📌 已取消 cid={cid} 全部置顶（unpin_all）")
+                            except Exception as _upa:
+                                logger.warning(f"📌 所有取消置顶方式均失败 cid={cid}: {_upa}")
             else:
                 # 仍有持仓：立即刷新置顶内容
                 current_text = await self.conversation_handler._build_pinned_summary()
@@ -963,11 +975,7 @@ class OpenClawTelegramBot:
 
         logger.info("✅ Telegram Bot 运行中")
 
-        # 启动市场价格定时刷新任务（每1小时全量拉取 KRX + 加密货币价格）
-        asyncio.create_task(
-            self.conversation_handler.start_price_refresh_loop(interval_seconds=3600)
-        )
-        logger.info("🔄 市场价格定时刷新任务已挂载（每60分钟自动更新）")
+        # ★ 已删除市场价格定时刷新任务 - 统一使用实时查询，无需缓存刷新 ★
 
         # 启动 Alpaca WebSocket 实时美股推送（若已配置 ALPACA_API_KEY）
         if self.us_hk_fetcher and getattr(self.us_hk_fetcher, 'alpaca_ws', None):

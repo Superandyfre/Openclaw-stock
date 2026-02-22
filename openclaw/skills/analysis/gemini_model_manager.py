@@ -10,7 +10,7 @@ from typing import Optional, Literal
 from loguru import logger
 
 try:
-    import google.generativeai as genai
+    from google import genai
     GENAI_AVAILABLE = True
 except ImportError:
     GENAI_AVAILABLE = False
@@ -89,8 +89,8 @@ class GeminiModelManager:
         """
         self.api_key = api_key or os.getenv('GOOGLE_AI_API_KEY')
         self.default_task_type = default_task_type
-        self.models = {}
-        self.current_model = None
+        self.genai_client = None
+        self.current_model_name = None
         self.deepseek_client = None
         self.groq_client = None
 
@@ -102,12 +102,12 @@ class GeminiModelManager:
             logger.error("GOOGLE_AI_API_KEY 未设置")
             return
 
-        # 配置 Gemini API
+        # 创建 Gemini Client (新API)
         try:
-            genai.configure(api_key=self.api_key)
-            logger.info("✅ Gemini API 配置成功")
+            self.genai_client = genai.Client(api_key=self.api_key)
+            logger.info("✅ Gemini Client 初始化成功")
         except Exception as e:
-            logger.error(f"配置Gemini API失败: {e}")
+            logger.error(f"创建Gemini Client失败: {e}")
             return
 
         # 初始化 Groq 客户端（lightweight 首选，~0.5s 延迟）
@@ -139,60 +139,37 @@ class GeminiModelManager:
         elif not OPENAI_SDK_AVAILABLE:
             logger.warning("⚠️ openai 包未安装，无法使用DeepSeek备用（pip install openai）")
 
-        # 预加载默认模型
-        self.get_model(default_task_type)
+        # 设置当前默认模型名称
+        self.current_model_name = self.MODEL_CONFIG[default_task_type]['name']
     
     def get_model(self, task_type: TaskType = None):
         """
-        获取指定任务类型的模型
+        获取指定任务类型的模型名称
         
         Args:
             task_type: 任务类型，如果为None则使用默认类型
         
         Returns:
-            GenerativeModel实例
+            模型名称字符串
         """
-        if not GENAI_AVAILABLE or not self.api_key:
-            return None
-        
         task_type = task_type or self.default_task_type
-        
-        # 如果模型已缓存，直接返回
-        if task_type in self.models:
-            self.current_model = self.models[task_type]
-            return self.current_model
-        
-        # 创建新模型
-        try:
-            config = self.MODEL_CONFIG[task_type]
-            model_name = config['name']
-            
-            model = genai.GenerativeModel(model_name)
-            self.models[task_type] = model
-            self.current_model = model
-            
-            logger.info(f"✅ 加载Gemini模型: {model_name} ({config['description']})")
-            return model
-            
-        except Exception as e:
-            logger.error(f"加载模型失败 ({task_type}): {e}")
-            
-            # 降级策略：尝试使用标准模型
-            if task_type != 'standard':
-                logger.warning(f"降级到标准模型")
-                return self.get_model('standard')
-            
-            return None
+        config = self.MODEL_CONFIG.get(task_type)
+        if config:
+            self.current_model_name = config['name']
+            logger.info(f"✅ 选择Gemini模型: {self.current_model_name} ({config['description']})")
+            return self.current_model_name
+        return None
     
-    def _get_model_by_name(self, model_name: str):
-        """按模型名称获取或创建模型实例"""
-        if model_name not in self.models:
-            try:
-                self.models[model_name] = genai.GenerativeModel(model_name)
-            except Exception as e:
-                logger.error(f"创建模型 {model_name} 失败: {e}")
-                return None
-        return self.models[model_name]
+    def _call_gemini_model(self, model_name: str, prompt: str) -> str:
+        """调用指定的Gemini模型 (同步)"""
+        if not self.genai_client:
+            raise RuntimeError("Gemini Client 未初始化")
+        
+        response = self.genai_client.models.generate_content(
+            model=model_name,
+            contents=prompt
+        )
+        return response.text.strip()
 
     async def _call_groq(self, prompt: str, model: str = 'llama-3.3-70b-versatile') -> Optional[str]:
         """调用 Groq LPU 推理（极低延迟，~0.5s）"""
@@ -254,21 +231,22 @@ class GeminiModelManager:
                 return text
             logger.warning("⚠️ Groq 失败，降级到 Gemini...")
 
-        # ── 3. Gemini 降级链 ──
+        # ── 3. Gemini 降级链 (使用新API) ──
+        if not self.genai_client:
+            logger.error("❌ Gemini Client 未初始化")
+            return None
+            
         primary = self.MODEL_CONFIG.get(task_type, {}).get('name', 'gemini-2.0-flash')
         chain = [primary] + [m for m in self.FALLBACK_CHAIN if m != primary]
 
         for model_name in chain:
-            model = self._get_model_by_name(model_name)
-            if not model:
-                continue
             try:
-                response = await asyncio.to_thread(model.generate_content, prompt)
+                text = await asyncio.to_thread(self._call_gemini_model, model_name, prompt)
                 if model_name != primary:
                     logger.warning(f"⚠️ 已降级使用: {model_name}")
                 else:
                     logger.info(f"✅ 使用模型: {model_name}")
-                return response.text.strip()
+                return text
             except Exception as e:
                 err = str(e)
                 if '429' in err or '404' in err or 'quota' in err.lower() or 'RESOURCE_EXHAUSTED' in err or 'not found' in err.lower():
@@ -296,7 +274,7 @@ class GeminiModelManager:
             task_type: 任务类型
 
         Returns:
-            GenerativeModel实例
+            模型名称
         """
         return self.get_model(task_type)
     
@@ -319,27 +297,27 @@ class GeminiModelManager:
 
 # 便捷函数
 def get_lightweight_model(api_key: Optional[str] = None):
-    """获取轻量级模型（最省钱）"""
+    """获取轻量级模型管理器（最省钱）"""
     manager = GeminiModelManager(api_key, default_task_type='lightweight')
-    return manager.current_model
+    return manager
 
 
 def get_standard_model(api_key: Optional[str] = None):
-    """获取标准模型（日常使用）"""
+    """获取标准模型管理器（日常使用）"""
     manager = GeminiModelManager(api_key, default_task_type='standard')
-    return manager.current_model
+    return manager
 
 
 def get_complex_model(api_key: Optional[str] = None):
-    """获取复杂分析模型（深度推理）"""
+    """获取复杂分析模型管理器（深度推理）"""
     manager = GeminiModelManager(api_key, default_task_type='complex')
-    return manager.current_model
+    return manager
 
 
 def get_experimental_model(api_key: Optional[str] = None):
-    """获取实验模型（最新技术）"""
+    """获取实验模型管理器（最新技术）"""
     manager = GeminiModelManager(api_key, default_task_type='experimental')
-    return manager.current_model
+    return manager
 
 
 if __name__ == '__main__':
@@ -347,12 +325,12 @@ if __name__ == '__main__':
     manager = GeminiModelManager()
     manager.list_available_models()
     
-    # 测试获取不同模型
+    # 测试模型切换
     print("\n测试模型切换：")
     
     for task_type in ['lightweight', 'standard', 'complex']:
-        model = manager.get_model(task_type)
-        if model:
-            print(f"✅ {task_type}: {model.model_name}")
+        model_name = manager.get_model(task_type)
+        if model_name:
+            print(f"✅ {task_type}: {model_name}")
         else:
             print(f"❌ {task_type}: 加载失败")

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 try:
-    import google.generativeai as genai
+    from google import genai
     
     api_key = os.getenv('GOOGLE_AI_API_KEY')
     if not api_key:

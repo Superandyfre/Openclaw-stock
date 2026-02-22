@@ -176,10 +176,14 @@ class ConversationHandler:
                     _sym = c.upper()
                     break
         
-        # [NEW] 上下文补全：如果没提币种，默认使用【上次提到的币种】
+        # [NEW] 上下文补全：如果没提币种，默认使用【上次用户提到的币种】
         if _sym is None:
-            # 查找历史记录最后一条包含币种的消息 (向前回溯3条)
-            for h in reversed(self.conversation_history[-3:]):
+            # 优先从用户消息（type='user'）中提取，避免从推荐消息中误提取第一个币种
+            # 向前回溯最多10条消息
+            for h in reversed(self.conversation_history[-10:]):
+                # 只从用户消息中提取上下文
+                if h.get('type') != 'user':
+                    continue
                 prev_text = h['message']
                 # 尝试从历史消息里提取币种 (复用正则)
                 hist_sym = None
@@ -193,21 +197,22 @@ class ConversationHandler:
                             break
                 if hist_sym:
                     _sym = hist_sym
+                    logger.info(f"[calc-query] 上下文补全：从历史用户消息'{prev_text[:20]}...'提取币种 {hist_sym}")
                     break
         
         if _sym is None:
             # 实在没办法，回退给 LLM
             return ''
 
-        # ── 3. 查价（Bithumb实时 → Upbit实时 → 缓存）──
+        # ── 3. 查价（Bithumb实时 → Upbit实时）──
         krw_sym = f'KRW-{_sym}'
         price_info = None
 
-        # ① Bithumb force_live
+        # ① Bithumb 实时查询
         if self.crypto_fetcher:
-            price_info = await self._get_current_price(krw_sym, force_live=True)
+            price_info = await self._get_current_price(krw_sym)
 
-        # ② Upbit force_live
+        # ② Upbit 实时查询
         if not price_info or price_info.get('price', 0) <= 0:
             if self.crypto_fetcher:
                 try:
@@ -219,13 +224,7 @@ class ConversationHandler:
                 except Exception:
                     pass
 
-        # ③ 缓存降级
-        if not price_info or price_info.get('price', 0) <= 0:
-            cached = self.__class__._crypto_price_cache.get(krw_sym)
-            if cached and cached.get('price', 0) > 0:
-                price_info = cached
-                logger.info(f'[calc-query] {krw_sym} 缓存降级 ₩{cached["price"]}')
-
+        # ③ 实时查询失败则返回错误（无缓存降级）
         if not price_info or price_info.get('price', 0) <= 0:
             return f'❌ 无法获取 {_sym} 价格，请稍后重试'
 
@@ -279,23 +278,31 @@ class ConversationHandler:
         if not (_is_buy or _is_sell):
             return None
 
-        # ── 提取资产代码 ──
+        # ── 提取资产代码（排除数量避免误识别）──
         _CRYPTO_CN = {
             '比特币': 'BTC', '以太坊': 'ETH', '以太': 'ETH', '瑞波': 'XRP',
             '狗狗币': 'DOGE', '索拉纳': 'SOL', '莱特币': 'LTC', '艾达': 'ADA',
             '波卡': 'DOT',
         }
         _sym = None
+        # 1. 优先匹配 KRW-XXX 格式
         m = _re.search(r'KRW-([A-Z]{2,10})', msg.upper())
         if m: _sym = m.group(1)
+        # 2. 匹配6位数字，但排除明显的数量表述
         if not _sym:
-            m = _re.search(r'\b(\d{6})\b', msg)
+            # 排除：数字+单位（个/股/手等）、数字+价格词（单价/均价等）
+            _qty_pattern = r'\d+(?:\.\d+)?\s*(?:个|枚|股|手|coins?|units?|单价|均价|价格|价位)'
+            msg_no_qty = _re.sub(_qty_pattern, '', msg, flags=_re.IGNORECASE)
+            # 在排除数量后的文本中查找6位数字（韩股代码）
+            m = _re.search(r'\b(\d{6})\b', msg_no_qty)
             if m: _sym = m.group(1)
+        # 3. 中文币名映射
         if not _sym:
             for cn, code in _CRYPTO_CN.items():
                 if cn in msg:
                     _sym = code
                     break
+        # 4. 通用英文代码
         if not _sym:
             for tok in _re.findall(r'(?<![A-Za-z])([A-Za-z]{2,10})(?![A-Za-z])', msg):
                 up = tok.upper()
@@ -318,21 +325,13 @@ class ConversationHandler:
             if code not in positions:
                 return f"❌ 未持有 {_sym}，无法卖出"
 
-            # 数量：有则部分平，无则全仓平
-            _qty_m = _re.search(r'(\d+(?:\.\d+)?)\s*(?:个|枚|股|手|coins?|units?)', msg)
+            # 数量：只识别"数量+单位"格式，其他情况默认全仓
+            # 避免误把价格当成数量（如"平仓 20.72"应理解为价格而非数量）
+            _qty_m = _re.search(r'([\d,，]+(?:\.\d+)?)\s*(?:个|枚|股|手|coins?|units?)', msg)
             if _qty_m:
-                quantity = float(_qty_m.group(1))
+                quantity = float(_qty_m.group(1).replace(',', '').replace('，', ''))
             else:
-                _bare_m = _re.search(
-                    r'(?:卖出|平仓|卖掉)\s*[^\d]*?(\d+(?:\.\d+)?)(?=\s*(?:单价|均价|价格|价位|@|$))',
-                    msg
-                )
-                if not _bare_m:
-                    _bare_m = _re.search(
-                        r'(?<![A-Za-z\d])(\d{1,10}(?:\.\d+)?)\s*(?:单价|均价|价格|价位|@)',
-                        msg
-                    )
-                quantity = float(_bare_m.group(1)) if _bare_m else None
+                quantity = None  # 默认全仓
 
             held = positions[code]['quantity']
             entry = positions[code]['avg_entry_price']
@@ -340,29 +339,26 @@ class ConversationHandler:
 
             # 价格：用户指定优先，否则查实时价
             _price = None
-            # 1. 明确前缀：单价/均价/@等
-            pm = _re.search(r'(?:单价|均价|价格|价位|@)\s*₩?\s*(\d+(?:[,，]\d+)*(?:\.\d+)?)', msg)
+            # 1. 明确前缀：单价/均价/@等，支持"价格是"、"价格为"、"价格："等语序
+            pm = _re.search(r'(?:单价|均价|价格|价位|@)(?:\s*(?:是|为|：|:))?\s*₩?\s*([\d,，]+(?:\.\d+)?)', msg)
             if pm:
                 _price = float(pm.group(1).replace(',', '').replace('，', ''))
-            # 2. 裸数字紧跟卖出词（如“111清仓”“113 平仓”）
+            # 2a. 卖出词 + 空格 + 数字（如"平仓 20.76"）
             if _price is None:
                 _SELL_RE = r'(?:清仓|清空|平仓|卖出|卖掉|止损|止盈|全卖掉|全抛掉|全卖|全抛|出货|抛掉|抛售|甩掉|清掉)'
-                pm2 = _re.search(rf'(?<!\d)(\d+(?:\.\d+)?)\s*{_SELL_RE}', msg)
+                pm2 = _re.search(rf'{_SELL_RE}\s+([\d,，]+(?:\.\d+)?)', msg)
                 if pm2:
-                    _price = float(pm2.group(1))
+                    _price = float(pm2.group(1).replace(',', '').replace('，', ''))
+            # 2b. 数字 + 空格 + 卖出词（如"20.76 平仓"）  
             if _price is None:
-                pi = await self._get_current_price(code, force_live=True)
+                _SELL_RE = r'(?:清仓|清空|平仓|卖出|卖掉|止损|止盈|全卖掉|全抛掉|全卖|全抛|出货|抛掉|抛售|甩掉|清掉)'
+                pm3 = _re.search(rf'(?<!\d)([\d,，]+(?:\.\d+)?)\s+{_SELL_RE}', msg)
+                if pm3:
+                    _price = float(pm3.group(1).replace(',', '').replace('，', ''))
+            if _price is None:
+                pi = await self._get_current_price(code)
                 if not pi or pi.get('price', 0) <= 0:
-                    # 降级：使用告警循环写入的最新缓存价格
-                    _cached = (
-                        self.__class__._live_pos_price_cache.get(code)
-                        or self.__class__._crypto_price_cache.get(code)
-                    )
-                    if _cached and _cached.get('price', 0) > 0:
-                        _price = _cached['price']
-                        logger.info(f"[direct-sell] 实时价失败，使用缓存价 {code} ₩{_price}")
-                    else:
-                        return f"❌ 无法获取 {_sym} 实时价格，请稍后重试或手动指定价格（如：{_sym} 平仓 价格1.83）"
+                    return f"❌ 无法获取 {_sym} 实时价格，请稍后重试或手动指定价格（如：{_sym} 平仓 价格1.83）"
                 else:
                     _price = pi['price']
 
@@ -375,19 +371,20 @@ class ConversationHandler:
             # ── Bithumb 卖出手续费 0.25% ──
             _is_crypto_sell = 'KRW-' in code or ('-' in code and not code.isdigit())
             _sell_fee = round(sell_qty * _price * 0.0025, 0) if _is_crypto_sell else 0.0
-            pnl -= _sell_fee   # 从净盈亏中扣除卖出手续费
+            # 净盈亏 = 价差盈亏 - 卖出手续费（注：买入手续费已单独扣除，不在成本价中）
+            net_pnl = pnl - _sell_fee
             self._auto_save()
-            logger.info(f"[direct-sell] {code} {sell_qty} @ {_price} 卖出手续费₩{_sell_fee:.0f} P&L ₩{pnl:.0f}")
-            pnl_icon = "🟢" if pnl >= 0 else "🔴"
-            _fee_line = f"   手续费(0.25%)：-₩{self._fmt_price(_sell_fee)}\n" if _sell_fee else ""
+            logger.info(f"[direct-sell] {code} {sell_qty} @ {_price} 卖出手续费₩{_sell_fee:.0f} P&L ₩{net_pnl:.0f}")
+            pnl_icon = "🟢" if net_pnl >= 0 else "🔴"
+            _fee_line = f"   卖出手续费(0.25%)：-₩{self._fmt_price(_sell_fee)}\n" if _sell_fee else ""
             return (
                 f"✅ 已平仓 {_sym}\n"
-                f"   数量：{sell_qty:g} 个\n"
-                f"   买入价：₩{self._fmt_price(entry)}（含买入手续费）\n"
-                f"   卖出价：₩{self._fmt_price(_price)}\n"
+                f"   数量：{self._fmt_quantity(sell_qty)} 个\n"
+                f"   买入成本：₩{self._fmt_price(entry)}\n"
+                f"   卖出价格：₩{self._fmt_price(_price)}\n"
+                f"   价差收益：{self._fmt_signed(pnl)} ({pnl_pct:+.2f}%)\n"
                 f"{_fee_line}"
-                f"   {pnl_icon} 净盈亏：{self._fmt_signed(pnl)}\n"
-                f"   {pnl_icon} 盈亏率：{pnl_pct:+.2f}%\n"
+                f"   {pnl_icon} 净盈亏：{self._fmt_signed(net_pnl)}\n"
                 f"   剩余资金：₩{self._fmt_price(self.tracker.cash)}"
             )
 
@@ -395,33 +392,33 @@ class ConversationHandler:
         if not _sym:
             return None
 
-        # 数量提取
-        _qty_m = _re.search(r'(\d+(?:\.\d+)?)\s*(?:个|枚|股|手|coins?|units?)', msg)
+        # 数量提取（支持千位分隔符：1,234.56 或 1，234.56 或 1234.56）
+        _qty_m = _re.search(r'([\d,，]+(?:\.\d+)?)\s*(?:个|枚|股|手|coins?|units?)', msg)
         if _qty_m:
-            quantity = float(_qty_m.group(1))
+            quantity = float(_qty_m.group(1).replace(',', '').replace('，', ''))
         else:
             _bare_m = _re.search(
-                r'(?:买入|购买|下单买)\s*[^\d]*?(\d+(?:\.\d+)?)(?=\s*(?:单价|均价|价格|价位|@|$))',
+                r'(?:买入|购买|下单买)\s*[^\d]*?([\d,，]+(?:\.\d+)?)(?=\s*(?:单价|均价|价格|价位|@|$))',
                 msg
             )
             if not _bare_m:
                 _bare_m = _re.search(
-                    r'(?<![A-Za-z\d])(\d{1,10}(?:\.\d+)?)\s*(?:单价|均价|价格|价位|@)',
+                    r'(?<![A-Za-z\d])([\d,，]{1,15}(?:\.\d+)?)\s*(?:单价|均价|价格|价位|@)',
                     msg
                 )
             if not _bare_m:
                 return None
-            quantity = float(_bare_m.group(1))
+            quantity = float(_bare_m.group(1).replace(',', '').replace('，', ''))
 
         code = _sym if (_sym.isdigit() and len(_sym) == 6) else f'KRW-{_sym}'
 
-        # 价格：用户指定优先，否则查实时价
+        # 价格：用户指定优先，否则查实时价（支持"价格是"、"价格为"、"价格："等语序）
         _price = None
-        pm = _re.search(r'(?:单价|均价|价格|价位|@)\s*₩?\s*(\d+(?:[,，]\d+)*(?:\.\d+)?)', msg)
+        pm = _re.search(r'(?:单价|均价|价格|价位|@)(?:\s*(?:是|为|：|:))?\s*₩?\s*(\d+(?:[,，]\d+)*(?:\.\d+)?)', msg)
         if pm:
             _price = float(pm.group(1).replace(',', '').replace('，', ''))
         if _price is None:
-            pi = await self._get_current_price(code, force_live=True)
+            pi = await self._get_current_price(code)
             if not pi or pi.get('price', 0) <= 0:
                 return None
             _price = pi['price']
@@ -445,7 +442,7 @@ class ConversationHandler:
         target_desc = ""
         
         if custom_target <= 0:
-            # 缓存未命中，执行快速ATR计算
+            # 缓存未命中，执行快速ATR计算（5秒超时保护）
             try:
                 from openclaw.skills.analysis.advanced_indicator_monitor import AdvancedIndicatorMonitor
                 monitor = AdvancedIndicatorMonitor()
@@ -455,8 +452,11 @@ class ConversationHandler:
                 
                 if is_crypto:
                     import pyupbit as _upbit
-                    # 获取过去48小时数据(同推荐算法)
-                    df_raw = await asyncio.to_thread(_upbit.get_ohlcv, code, count=48, interval='minute60')
+                    # 获取过去48小时数据(同推荐算法) - 5秒超时
+                    df_raw = await asyncio.wait_for(
+                        asyncio.to_thread(_upbit.get_ohlcv, code, count=48, interval='minute60'),
+                        timeout=5.0
+                    )
                     if df_raw is not None and not df_raw.empty:
                         for _date, _row in df_raw.iterrows():
                             candles.append({'timestamp': str(_date), 'open': float(_row['open']),
@@ -471,15 +471,22 @@ class ConversationHandler:
                     t_steady, _, _, _, _, _ = self._calculate_target_price(code.replace('KRW-',''), _price, analysis)
                     custom_target = t_steady
                     target_desc = " (实时ATR计算)"
+            except asyncio.TimeoutError:
+                logger.warning(f"ATR计算超时(5s)，使用默认+20%目标价")
+                custom_target = 0.0
             except Exception as _e:
                 logger.warning(f"现场计算目标价失败: {_e}")
                 custom_target = 0.0
 
-        # 买入时将手续费摊入成本（等效提高买入价，使盈亏计算自动含费）
-        _effective_buy_price = _price * (1 + _FEE_RATE) if _is_crypto_buy else _price
-        success = self.tracker.open_position(code, quantity, _effective_buy_price, custom_profit_target_price=custom_target)
-        if not success:
+        # 买入：成本价 = 买入价（不含手续费），手续费单独从现金扣除
+        success = self.tracker.open_position(code, quantity, _price, custom_profit_target_price=custom_target)
+        if not success or not success.get('success'):
             return f"❌ 买入失败（tracker 错误）"
+        
+        # 手续费单独扣除（不计入成本）
+        if _fee > 0:
+            self.tracker.cash -= _fee
+        
         self._auto_save()
         
         # 补充目标价信息
@@ -490,8 +497,10 @@ class ConversationHandler:
             
         logger.info(f"[direct-buy] {code} {quantity} @ {_price} 手续费₩{_fee:.0f} 总₩{_total_needed:.0f} Target={custom_target}")
         _fee_line = f"\n   手续费(0.25%)：₩{self._fmt_price(_fee)}" if _fee else ""
+        
         return (
-            f"✅ 已买入 {_sym} {quantity:g}个 @ ₩{self._fmt_price(_price)}"
+            f"✅ 已买入 {_sym} {self._fmt_quantity(quantity)}个 @ ₩{self._fmt_price(_price)}\n"
+            f"   成本单价：₩{self._fmt_price(_price)}"
             f"{_fee_line}\n"
             f"   总扣款：₩{self._fmt_price(_total_needed)}{target_msg}\n"
             f"   剩余资金：₩{self._fmt_price(self.tracker.cash)}"
@@ -543,6 +552,23 @@ class ConversationHandler:
                 })
                 return greet_reply
 
+            # 💰 现金查询直接短路：不走LLM，直接返回余额
+            _CASH_QUERY_KWS = ['现金', '余额', '可用现金', '账户余额', '资金', '有多少钱', '钱']
+            is_cash_query = (
+                any(k in user_message for k in _CASH_QUERY_KWS)
+                and len(user_message.strip()) <= 10  # 短查询，避免误判复杂指令
+                and not any(k in user_message for k in ['调整', '添加', '增加', '加', '减', '改', '设', '买', '卖', '充值', '翻倍', '倍', '推荐', '分析', '怎么', '如何', '应该', '配置', '建议'])
+            )
+            if is_cash_query and self.tracker:
+                cash_reply = f"💵 可用现金：₩{self._fmt_price(self.tracker.cash)}"
+                logger.info(f"✅ [直接短路] 现金查询: ₩{self.tracker.cash:,.0f}")
+                self.conversation_history.append({
+                    'timestamp': datetime.now().isoformat(),
+                    'message': cash_reply,
+                    'type': 'assistant'
+                })
+                return cash_reply
+
             # �🔢 盈亏/持仓直接短路：不走LLM，直接计算返回，避免幻觉
             _PNL_DIRECT_KWS = ['现在盈亏', '盈亏', '浮动盈亏', '当前盈亏', '持仓盈亏',
                                '盈利', '亏损多少', '赚了多少', '亏了多少',
@@ -576,40 +602,342 @@ class ConversationHandler:
                     })
                     return no_pos
 
-            # � 资金调整直接短路：Python正则解析，不走LLM
-            _adj_m = re.search(
-                r'(?:'
-                r'调整\s*总?(?:资产|资金)\s+'
-                r'|(?:总?资产|总?资金).*?(?:改为|更改为|更新为|设为|设置为|调整为|变更为|换成|重置为)'
-                r'|(?:资产|资金).*?(?:更改|修改|调整)\s*为'
-                r')\s*(\d+(?:\.\d+)?)\s*万',
+            # 🔢 资金倍数操作直接短路：翻倍、×2、增加N倍等
+            # 先检查"增加/扩大/变为N倍"格式（更具体，优先级更高）
+            _multiply_m2 = re.search(
+                r'(?:总?资金|资产|现金|余额).*?(?:增加|扩大|变为|变成).*?(\d+(?:\.\d+)?)\s*倍',
                 user_message
             )
-            if not _adj_m:
-                _adj_m2 = re.search(
-                    r'(?:总?资产|总?资金).*?(?:改为|更改为|更新为|设为|设置为|调整为|变更为|换成|重置为)\s*(\d{4,})',
-                    user_message
-                )
-                _adj_amount = float(_adj_m2.group(1)) if _adj_m2 else None
+            if _multiply_m2:
+                multiplier = float(_multiply_m2.group(1))
+                # "增加N倍" = 原金额×(1+N)，"扩大/变为N倍" = 原金额×N
+                if '增加' in user_message:
+                    multiplier = 1 + multiplier  # 增加2倍 = 原×3
             else:
-                _adj_amount = float(_adj_m.group(1)) * 10000
+                # 再检查简单翻倍格式
+                _multiply_m = re.search(
+                    r'(?:总?资金|资产|现金|余额).*?(?:翻倍|double|×2|\*2|x2)',
+                    user_message,
+                    re.IGNORECASE
+                )
+                if _multiply_m:
+                    multiplier = 2.0  # 翻倍 = ×2
+                else:
+                    multiplier = None
+            if multiplier and self.tracker:
+                old_cash = self.tracker.cash
+                old_capital = self.tracker.initial_capital
+                
+                # 计算增加金额（按当前总资产倍增）
+                _pos_val = sum(
+                    pos['quantity'] * pos['avg_entry_price']
+                    for pos in self.tracker.positions.values()
+                ) if self.tracker.positions else 0.0
+                current_total = old_cash + _pos_val
+                
+                # 倍增后的总资产
+                new_total = current_total * multiplier
+                add_amount = new_total - current_total
+                
+                self.tracker.cash += add_amount
+                self.tracker.initial_capital += add_amount
+                self._auto_save()
+                
+                _multiply_reply = (
+                    f"✅ 资金已{'翻倍' if multiplier == 2 else f'扩大{multiplier:.1f}倍'}\n"
+                    f"   原总资产：₩{self._fmt_price(current_total)}\n"
+                    f"   添加金额：₩{self._fmt_price(add_amount)}\n"
+                    f"   新总资产：₩{self._fmt_price(new_total)}\n"
+                    f"   可用现金：₩{self._fmt_price(old_cash)} → ₩{self._fmt_price(self.tracker.cash)}\n"
+                    f"   持仓价值：₩{self._fmt_price(_pos_val)}"
+                )
+                logger.info(f"✅ [直接短路] 资金倍增: ×{multiplier}, +₩{add_amount:,.0f}, 新总资产: ₩{new_total:,.0f}")
+                self.conversation_history.append({
+                    'timestamp': datetime.now().isoformat(),
+                    'message': _multiply_reply,
+                    'type': 'assistant'
+                })
+                return _multiply_reply
+
+            # �💰 添加/增加现金直接短路：Python正则解析，不走LLM
+            # 匹配：现金添加10000、可用资金添加70000、总资金添加1000000、现金余额添加到10000、充值100000等
+            # 清理数字中的逗号分隔符（半角,和全角，）
+            _clean_msg_add = re.sub(r'(?<=\d)[,，](?=\d)', '', user_message)
+            
+            _add_cash_m = re.search(
+                r'(?:'
+                r'(?:总?资金|现金|可用现金|账户余额|现金余额|可用资金|余额).*?(?:添加|增加|充值|加|加上)'
+                r'|(?:添加|增加|充值|加).*?(?:总?资金|现金|可用现金|账户余额|现金余额)'
+                r')\s*(?:到)?\s*(\d+(?:\.\d+)?)\s*万',
+                _clean_msg_add
+            )
+            if not _add_cash_m:
+                _add_cash_m2 = re.search(
+                    r'(?:'
+                    r'(?:总?资金|现金|可用现金|账户余额|现金余额|可用资金|余额).*?(?:添加|增加|充值|加|加上)'
+                    r'|(?:添加|增加|充值|加).*?(?:总?资金|现金|可用现金|账户余额|现金余额)'
+                    r'|(?:充值|添加|增加|加)'  # 单独的充值/添加/增加/加后跟数字
+                    r')\s*(?:到)?\s*(\d{4,})',
+                    _clean_msg_add
+                )
+                _add_cash_amount = float(_add_cash_m2.group(1)) if _add_cash_m2 else None
+            else:
+                _add_cash_amount = float(_add_cash_m.group(1)) * 10000
+
+            if _add_cash_amount is not None and self.tracker:
+                old_cash = self.tracker.cash
+                old_capital = self.tracker.initial_capital
+                self.tracker.cash += _add_cash_amount
+                self.tracker.initial_capital += _add_cash_amount
+                self._auto_save()
+                
+                _pos_val = sum(
+                    pos['quantity'] * pos['avg_entry_price']
+                    for pos in self.tracker.positions.values()
+                ) if self.tracker.positions else 0.0
+                
+                _add_reply = (
+                    f"✅ 现金已添加\n"
+                    f"   添加金额：₩{self._fmt_price(_add_cash_amount)}\n"
+                    f"   可用现金：₩{self._fmt_price(old_cash)} → ₩{self._fmt_price(self.tracker.cash)}\n"
+                    f"   总资产：₩{self._fmt_price(old_capital)} → ₩{self._fmt_price(self.tracker.initial_capital)}\n"
+                    f"   持仓价值：₩{self._fmt_price(_pos_val)}"
+                )
+                logger.info(f"✅ [直接短路] 现金添加: +₩{_add_cash_amount:,.0f}, 新现金: ₩{self.tracker.cash:,.0f}")
+                self.conversation_history.append({
+                    'timestamp': datetime.now().isoformat(),
+                    'message': _add_reply,
+                    'type': 'assistant'
+                })
+                return _add_reply
+
+            # 📝 资金调整直接短路：Python正则解析，不走LLM
+            # 支持：调整、清零、减少、运算符等多种表达
+            # 清理数字中的逗号分隔符（半角,和全角，：70,000 或 8，000，000 → 70000 或 8000000）
+            _clean_msg = re.sub(r'(?<=\d)[,，](?=\d)', '', user_message)
+            
+            # 判断是调整"现金"还是"总资产"
+            _is_cash_adjust = bool(re.search(r'现金|可用现金|账户余额', user_message))
+            _adj_amount = None
+            _adj_operation = None  # 'set', 'decrease', 'decrease_to', 'zero', 'add', 'subtract', 'multiply', 'divide'
+            
+            # 0️⃣ 运算符命令：支持"现金+80000"、"资金-5000"、"现金*2"、"资金/2"等
+            _math_m = re.search(
+                r'(?:总?资产|总?资金|现金|可用现金|账户余额)\s*([+\-*/×÷])\s*(\d+(?:\.\d+)?)',
+                _clean_msg
+            )
+            if _math_m:
+                _operator = _math_m.group(1)
+                _operand = float(_math_m.group(2))
+                
+                # 归一化运算符（×和÷转为标准符号）
+                if _operator == '×':
+                    _operator = '*'
+                elif _operator == '÷':
+                    _operator = '/'
+                
+                if _operator == '+':
+                    _adj_operation = 'add'
+                    _adj_amount = _operand
+                elif _operator == '-':
+                    _adj_operation = 'subtract'
+                    _adj_amount = _operand
+                elif _operator == '*':
+                    _adj_operation = 'multiply'
+                    _adj_amount = _operand
+                elif _operator == '/':
+                    _adj_operation = 'divide'
+                    _adj_amount = _operand
+                
+                logger.debug(f"🔍 匹配到运算符命令: {user_message} → op={_adj_operation}, operand={_adj_amount}")
+            
+            # 1️⃣ 清零命令：支持"资金清零"、"现金清零"、"全部清零"等
+            if not _adj_amount and re.search(r'(?:总?资产|总?资金|现金|可用现金|账户余额|全部).*?清零|清空', user_message):
+                _adj_amount = 0.0
+                _adj_operation = 'zero'
+                logger.debug(f"🔍 匹配到清零命令: {user_message}")
+            
+            # 2️⃣ 减少命令（带"万"）：支持"现金减5万"、"资金减少3万"等
+            if not _adj_amount:
+                _decrease_m = re.search(
+                    r'(?:总?资产|总?资金|现金|可用现金|账户余额).*?(?:减少|减)\s*(\d+(?:\.\d+)?)\s*万',
+                    _clean_msg
+                )
+                if _decrease_m:
+                    _adj_amount = float(_decrease_m.group(1)) * 10000
+                    _adj_operation = 'decrease'
+                    logger.debug(f"🔍 匹配到减少命令(万): {user_message} → {_adj_amount}")
+            
+            # 3️⃣ 减少到命令（带"万"）：支持"现金减到8万"、"资金减少到80万"等
+            if not _adj_amount:
+                _decrease_to_m = re.search(
+                    r'(?:总?资产|总?资金|现金|可用现金|账户余额).*?(?:减少到|减到)\s*(\d+(?:\.\d+)?)\s*万',
+                    _clean_msg
+                )
+                if _decrease_to_m:
+                    _adj_amount = float(_decrease_to_m.group(1)) * 10000
+                    _adj_operation = 'decrease_to'
+                    logger.debug(f"🔍 匹配到减少到命令(万): {user_message} → {_adj_amount}")
+            
+            # 4️⃣ 调整/设置命令（带"万"）：支持"调整资金3万"、"资金调整到3万"、"改资金5万"等
+            if not _adj_amount:
+                _adj_m = re.search(
+                    r'(?:'
+                    r'(?:调整|改)\s*(?:总?资产|总?资金|现金|可用现金|账户余额)(?:\s*(?:到|为|改为|设为))?'  # (调整|改)+关键词+(到/为)?+数字万
+                    r'|(?:总?资产|总?资金|现金|可用现金|账户余额).*?(?:调整|改|改为|更改为|更新为|设为|设置为|变更为|换成|重置为|到|为)'  # 关键词+动词+数字万
+                    r')\s*(\d+(?:\.\d+)?)\s*万',
+                    _clean_msg
+                )
+                if _adj_m:
+                    _adj_amount = float(_adj_m.group(1)) * 10000
+                    _adj_operation = 'set'
+                    logger.debug(f"🔍 匹配到调整命令(万): {user_message} → {_adj_amount}")
+            
+            # 5️⃣ 减少命令（普通数字）：支持"现金减5000"、"资金减少5000"等
+            if not _adj_amount:
+                _decrease_m2 = re.search(
+                    r'(?:总?资产|总?资金|现金|可用现金|账户余额).*?(?:减少|减)\s*(\d+)',
+                    _clean_msg
+                )
+                if _decrease_m2:
+                    _adj_amount = float(_decrease_m2.group(1))
+                    _adj_operation = 'decrease'
+                    logger.debug(f"🔍 匹配到减少命令: {user_message} → {_adj_amount}")
+            
+            # 6️⃣ 减少到命令（普通数字）：支持"现金减到80000"、"资金减少到800000"等
+            if not _adj_amount:
+                _decrease_to_m2 = re.search(
+                    r'(?:总?资产|总?资金|现金|可用现金|账户余额).*?(?:减少到|减到)\s*(\d+)',
+                    _clean_msg
+                )
+                if _decrease_to_m2:
+                    _adj_amount = float(_decrease_to_m2.group(1))
+                    _adj_operation = 'decrease_to'
+                    logger.debug(f"🔍 匹配到减少到命令: {user_message} → {_adj_amount}")
+            
+            # 7️⃣ 调整/设置命令（普通数字）：支持"调整资金为60000000"、"改资金60000"、"现金改为0"等
+            if not _adj_amount and _adj_operation != 'zero':
+                _adj_m2 = re.search(
+                    r'(?:'
+                    r'(?:调整|改)\s*(?:总?资产|总?资金|现金|可用现金|账户余额)(?:\s*(?:到|为|改为|设为))?'  # (调整|改)在前
+                    r'|(?:总?资产|总?资金|现金|可用现金|账户余额).*?(?:调整|改|改为|更改为|更新为|设为|设置为|变更为|换成|重置为|到|为)'  # 关键词在前
+                    r')\s*(\d+)',
+                    _clean_msg
+                )
+                if _adj_m2:
+                    _adj_amount = float(_adj_m2.group(1))
+                    _adj_operation = 'set'
+                    logger.debug(f"🔍 匹配到调整命令: {user_message} → {_adj_amount}")
 
             if _adj_amount is not None and self.tracker:
                 _pos_val = sum(
                     pos['quantity'] * pos['avg_entry_price']
                     for pos in self.tracker.positions.values()
                 ) if self.tracker.positions else 0.0
-                _new_cash = max(0.0, _adj_amount - _pos_val)
-                self.tracker.initial_capital = _adj_amount
-                self.tracker.cash = _new_cash
+                
+                # 根据操作类型计算最终金额
+                if _adj_operation == 'add':
+                    # 加法：当前值 + 操作数
+                    if _is_cash_adjust:
+                        _final_amount = self.tracker.cash + _adj_amount
+                    else:
+                        _final_amount = self.tracker.initial_capital + _adj_amount
+                elif _adj_operation == 'subtract':
+                    # 减法：当前值 - 操作数
+                    if _is_cash_adjust:
+                        _final_amount = max(0.0, self.tracker.cash - _adj_amount)
+                    else:
+                        _final_amount = max(0.0, self.tracker.initial_capital - _adj_amount)
+                elif _adj_operation == 'multiply':
+                    # 乘法：当前值 * 操作数
+                    if _is_cash_adjust:
+                        _final_amount = self.tracker.cash * _adj_amount
+                    else:
+                        _final_amount = self.tracker.initial_capital * _adj_amount
+                elif _adj_operation == 'divide':
+                    # 除法：当前值 / 操作数
+                    if _adj_amount == 0:
+                        logger.error("除数不能为0")
+                        return "❌ 除数不能为0"
+                    if _is_cash_adjust:
+                        _final_amount = self.tracker.cash / _adj_amount
+                    else:
+                        _final_amount = self.tracker.initial_capital / _adj_amount
+                elif _adj_operation == 'decrease':
+                    # 减少：当前值 - 减少量
+                    if _is_cash_adjust:
+                        _final_amount = max(0.0, self.tracker.cash - _adj_amount)
+                    else:
+                        _final_amount = max(0.0, self.tracker.initial_capital - _adj_amount)
+                elif _adj_operation == 'decrease_to':
+                    # 减少到：目标值
+                    _final_amount = _adj_amount
+                else:  # 'set' or 'zero'
+                    # 设置为/清零：目标值
+                    _final_amount = _adj_amount
+                
+                if _is_cash_adjust:
+                    # 调整现金：cash = 最终金额, initial_capital = cash + 持仓价值
+                    _old_cash = self.tracker.cash
+                    self.tracker.cash = _final_amount
+                    self.tracker.initial_capital = _final_amount + _pos_val
+                    
+                    if _adj_operation == 'add':
+                        _op_desc = f"已增加 ₩{self._fmt_price(_adj_amount)}"
+                    elif _adj_operation == 'subtract':
+                        _op_desc = f"已减少 ₩{self._fmt_price(_adj_amount)}"
+                    elif _adj_operation == 'multiply':
+                        _op_desc = f"已乘以 {_adj_amount}"
+                    elif _adj_operation == 'divide':
+                        _op_desc = f"已除以 {_adj_amount}"
+                    elif _adj_operation == 'zero':
+                        _op_desc = "已清零"
+                    elif _adj_operation == 'decrease':
+                        _op_desc = f"已减少 ₩{self._fmt_price(_adj_amount)}"
+                    elif _adj_operation == 'decrease_to':
+                        _op_desc = f"已减少到 ₩{self._fmt_price(_final_amount)}"
+                    else:
+                        _op_desc = f"已调整为 ₩{self._fmt_price(_final_amount)}"
+                    
+                    _adj_reply = (
+                        f"✅ 现金{_op_desc}\n"
+                        f"   可用现金：₩{self._fmt_price(_final_amount)}\n"
+                        f"   持仓价值：₩{self._fmt_price(_pos_val)}\n"
+                        f"   总资产：₩{self._fmt_price(self.tracker.initial_capital)}"
+                    )
+                    logger.info(f"✅ [直接短路] 现金{_op_desc}: ₩{_old_cash:,.0f} → ₩{_final_amount:,.0f}")
+                else:
+                    # 调整总资产：initial_capital = 最终金额, cash = initial_capital - 持仓价值
+                    _old_capital = self.tracker.initial_capital
+                    _new_cash = max(0.0, _final_amount - _pos_val)
+                    self.tracker.initial_capital = _final_amount
+                    self.tracker.cash = _new_cash
+                    
+                    if _adj_operation == 'add':
+                        _op_desc = f"已增加 ₩{self._fmt_price(_adj_amount)}"
+                    elif _adj_operation == 'subtract':
+                        _op_desc = f"已减少 ₩{self._fmt_price(_adj_amount)}"
+                    elif _adj_operation == 'multiply':
+                        _op_desc = f"已乘以 {_adj_amount}"
+                    elif _adj_operation == 'divide':
+                        _op_desc = f"已除以 {_adj_amount}"
+                    elif _adj_operation == 'zero':
+                        _op_desc = "已清零"
+                    elif _adj_operation == 'decrease':
+                        _op_desc = f"已减少 ₩{self._fmt_price(_adj_amount)}"
+                    elif _adj_operation == 'decrease_to':
+                        _op_desc = f"已减少到 ₩{self._fmt_price(_final_amount)}"
+                    else:
+                        _op_desc = f"已调整为 ₩{self._fmt_price(_final_amount)}"
+                    
+                    _adj_reply = (
+                        f"✅ 总资产{_op_desc}\n"
+                        f"   可用现金：₩{self._fmt_price(_new_cash)}\n"
+                        f"   持仓价值：₩{self._fmt_price(_pos_val)}"
+                    )
+                    logger.info(f"✅ [直接短路] 总资产{_op_desc}: ₩{_old_capital:,.0f} → ₩{_final_amount:,.0f}")
+                
                 self._auto_save()
-                _adj_reply = (
-                    f"✅ 账户资金已更新\n"
-                    f"   总资产：₩{self._fmt_price(_adj_amount)}\n"
-                    f"   可用现金：₩{self._fmt_price(_new_cash)}\n"
-                    f"   持仓价值：₩{self._fmt_price(_pos_val)}"
-                )
-                logger.info(f"✅ [直接短路] 总资产调整: ₩{_adj_amount:,.0f}, 现金: ₩{_new_cash:,.0f}")
                 self.conversation_history.append({
                     'timestamp': datetime.now().isoformat(),
                     'message': _adj_reply,
@@ -617,7 +945,7 @@ class ConversationHandler:
                 })
                 return _adj_reply
 
-            # �💵 资金/账户余额直接短路
+            # 💵 资金/账户余额直接短路
             _FUND_KWS = ['总资金', '资金', '余额', '可用资金', '账户余额',
                          '剩余资金', '还剩多少钱', '还有多少钱', '账户资金',
                          '本金', '资产', '总资产', '账户总额']
@@ -634,8 +962,8 @@ class ConversationHandler:
                 total_market_val = 0.0
                 if positions:
                     for sym, pos in positions.items():
-                        cached = self.__class__._live_pos_price_cache.get(sym)
-                        cur = cached['price'] if cached else pos['avg_entry_price']
+                        # 使用入场价格估算（实时查询会太慢）
+                        cur = pos['avg_entry_price']
                         total_market_val += cur * pos['quantity']
                 total_assets = self.tracker.cash + total_market_val
                 pnl_total = total_assets - self.tracker.initial_capital
@@ -715,7 +1043,7 @@ class ConversationHandler:
                             _psym = _c.upper(); break
                 if _psym:
                     _pkrw = f'KRW-{_psym}'
-                    _pinfo = await self._get_current_price(_pkrw, force_live=True)
+                    _pinfo = await self._get_current_price(_pkrw)
                     if _pinfo and _pinfo.get('price', 0) > 0:
                         from datetime import datetime as _dtp
                         _pts = _dtp.now().strftime('%H:%M')
@@ -794,20 +1122,12 @@ class ConversationHandler:
     
     async def _fetch_all_crypto_prices(self) -> dict:
         """
-        从 Upbit + Bithumb 批量获取全量价格，合并后返回。
+        从 Upbit + Bithumb 批量获取全量实时价格，合并后返回。
         Upbit:   pyupbit.get_current_price(markets_list) — 1次调用，238+币
         Bithumb: pybithumb.get_current_price('ALL')      — 1次调用，448+币
-        结果缓存 5 小时（同一进程内复用）。
+        ★ 无缓存，每次均为实时查询 ★
         返回: {symbol(KRW-XXX): {price, change_pct, volume, exchange}}
         """
-        import time as _time
-        cls = self.__class__
-        now = _time.time()
-        if cls._crypto_price_cache and (now - cls._crypto_price_cache_ts) < cls._MARKET_CACHE_TTL:
-            age_min = int((now - cls._crypto_price_cache_ts) / 60)
-            logger.info(f'加密货币行情缓存命中（{age_min}分钟前拉取，剩余有效期约{cls._MARKET_CACHE_TTL//60 - age_min}分钟）')
-            return cls._crypto_price_cache
-
         combined: dict = {}
 
         async def _fetch_upbit():
@@ -884,10 +1204,7 @@ class ConversationHandler:
             else:
                 combined[sym] = info
 
-        logger.info(f'全交易所合并: {len(combined)} 个币种')
-        # 写入缓存
-        cls._crypto_price_cache = combined
-        cls._crypto_price_cache_ts = _time.time()
+        logger.info(f'[实时] 全交易所合并: {len(combined)} 个币种')
         return combined
 
     async def _resolve_query_price_tags(self, llm_response: str) -> tuple[str, dict]:
@@ -902,9 +1219,9 @@ class ConversationHandler:
 
         symbols = list(dict.fromkeys(t.strip() for t in tags))  # 去重保序
 
-        # 并发查所有（force_live=True：绕过缓存，直接从交易所获取实时价格）
+        # 并发查所有（统一使用实时查询）
         results = await asyncio.gather(
-            *[self._get_current_price(s, force_live=True) for s in symbols],
+            *[self._get_current_price(s) for s in symbols],
             return_exceptions=True
         )
 
@@ -974,8 +1291,10 @@ class ConversationHandler:
                         import pyupbit as _upbit
                         # 用户要求参考最近8小时波动率，改用小时线 (minute60)
                         # 获取过去48小时数据，足以计算 ATR(14) 或观察8小时趋势
-                        df_raw = await asyncio.to_thread(
-                            _upbit.get_ohlcv, sym, count=48, interval='minute60'
+                        # 5秒超时保护
+                        df_raw = await asyncio.wait_for(
+                            asyncio.to_thread(_upbit.get_ohlcv, sym, count=48, interval='minute60'),
+                            timeout=5.0
                         )
                         if df_raw is not None and not df_raw.empty:
                             for _date, _row in df_raw.iterrows():
@@ -987,6 +1306,8 @@ class ConversationHandler:
                                     'close':  float(_row.get('close', 0)),
                                     'volume': float(_row.get('volume', 0)),
                                 })
+                    except asyncio.TimeoutError:
+                        logger.warning(f"加密货币K线获取超时(5s): {sym}")
                     except Exception as _ce:
                         logger.debug(f"加密货币K线获取失败 {sym}: {_ce}")
 
@@ -1189,15 +1510,30 @@ class ConversationHandler:
           1. 价格动量分（涨跌幅）
           2. 成交量分（流动性）
           3. 技术指标分（RSI/MACD/MFI/ADX/EMA排列/布林带/OBV）
-          4. 综合评分后返回 Markdown 格式的打分报告，供 LLM 使用。
+          4. 财报数据分（PE/PB/ROE/利润率/增长等）- 仅股票
+          5. 宏观数据分（GDP/利率/通胀/市场情绪）
+          6. 综合评分后返回 Markdown 格式的打分报告，供 LLM 使用。
         """
         if not candidates:
             return ""
 
         try:
             from openclaw.skills.analysis.advanced_indicator_monitor import AdvancedIndicatorMonitor
+            from openclaw.skills.data_collection.fundamental_data_fetcher import get_fundamental_fetcher
         except ImportError:
             return ""
+        
+        # 获取财报数据获取器（仅股票需要）
+        fundamental_fetcher = get_fundamental_fetcher() if not is_crypto else None
+        
+        # 获取宏观数据（全局，所有资产共享）
+        macro_data = {}
+        try:
+            if fundamental_fetcher:
+                macro_data = await fundamental_fetcher.get_macro_indicators()
+                logger.debug(f"📊 宏观数据: 市场情绪={macro_data.get('market_sentiment')}, 得分={macro_data.get('score')}")
+        except Exception as e:
+            logger.warning(f"获取宏观数据失败: {e}")
 
         # ── 步骤1：按成交量预筛 top_n 候选 ──
         sorted_cands = sorted(
@@ -1244,19 +1580,25 @@ class ConversationHandler:
                 if not candles and (sym.startswith('KRW-') or sym.startswith('USDT-')):
                     # 5分钟线 × 96根 = 近8小时（加密货币24H交易，始终有数据）
                     import pyupbit as _upbit
-                    df_raw = await asyncio.to_thread(
-                        _upbit.get_ohlcv, sym, count=96, interval='minute5'
-                    )
-                    if df_raw is not None and not df_raw.empty:
-                        for _, row in df_raw.iterrows():
-                            candles.append({
-                                'timestamp': str(_),
-                                'open': float(row.get('open', 0)),
-                                'high': float(row.get('high', 0)),
-                                'low':  float(row.get('low', 0)),
-                                'close': float(row.get('close', 0)),
-                                'volume': float(row.get('volume', 0)),
-                            })
+                    try:
+                        df_raw = await asyncio.wait_for(
+                            asyncio.to_thread(_upbit.get_ohlcv, sym, count=96, interval='minute5'),
+                            timeout=5.0
+                        )
+                        if df_raw is not None and not df_raw.empty:
+                            for _, row in df_raw.iterrows():
+                                candles.append({
+                                    'timestamp': str(_),
+                                    'open': float(row.get('open', 0)),
+                                    'high': float(row.get('high', 0)),
+                                    'low':  float(row.get('low', 0)),
+                                    'close': float(row.get('close', 0)),
+                                    'volume': float(row.get('volume', 0)),
+                                })
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Upbit K线获取超时(5s): {sym}")
+                    except Exception as _ue:
+                        logger.warning(f"Upbit K线获取失败 {sym}: {_ue}")
                 elif sym.isdigit() and len(sym) == 6:
                     from pykrx import stock as _krx
                     from datetime import datetime as _dt2, timedelta as _td2
@@ -1420,6 +1762,13 @@ class ConversationHandler:
             vol_s = (vol_log / vol_max * 20) if vol_max > 0 else 0
             score += vol_s
             score_detail['流动性'] = f"{vol_s:.1f}"
+            
+            # B2. 宏观环境分（-20~+20）适用于所有资产
+            if macro_data:
+                macro_s = macro_data.get('score', 0)
+                score += macro_s
+                sentiment = macro_data.get('market_sentiment', 'neutral')
+                score_detail['宏观'] = f"{sentiment}({macro_s:+.0f})"
 
             if analysis and 'error' not in analysis:
                 mom   = analysis.get('momentum', {})
@@ -1488,6 +1837,42 @@ class ConversationHandler:
                 ema_s = {'BULLISH': 5, 'NEUTRAL': 0, 'BEARISH': -5}.get(ema_align, 0)
                 score += ema_s
                 score_detail['EMA'] = f"{ema_align}({ema_s:+d})"
+            
+            # I2. 财报基本面分（0~30，仅股票）- 新增
+            if not is_crypto and fundamental_fetcher and sym.isdigit() and len(sym) == 6:
+                try:
+                    # 韩股代码转换为适合Finnhub的格式（如需要）
+                    # 这里暂时跳过财报分析，因为Finnhub主要支持美股
+                    # 韩股可以考虑其他数据源或使用DART API
+                    pass
+                except Exception as e:
+                    logger.debug(f"获取 {sym} 财报数据失败: {e}")
+            elif not is_crypto and fundamental_fetcher:
+                # 美股财报分析
+                try:
+                    fundamental = await fundamental_fetcher.get_fundamental_metrics(sym)
+                    earnings = await fundamental_fetcher.get_earnings_quality(sym)
+                    
+                    # 财报得分（0~30分）
+                    fund_s = (fundamental.get('score', 50) - 50) * 0.3  # 转换为-15~+15
+                    score += fund_s
+                    
+                    # 盈利质量得分（-20~+20）
+                    earn_s = earnings.get('score', 0)
+                    score += earn_s
+                    
+                    pe = fundamental.get('pe_ratio', 0)
+                    roe = fundamental.get('roe', 0)
+                    growth = fundamental.get('revenue_growth', 0)
+                    
+                    if fund_s != 0 or earn_s != 0:
+                        score_detail['财报'] = f"PE{pe:.1f}/ROE{roe:.1f}%({fund_s:+.1f})"
+                        if earn_s != 0:
+                            surprise = earnings.get('earnings_surprise', 0)
+                            score_detail['盈利'] = f"超预期{surprise:.1f}%({earn_s:+.0f})"
+                        
+                except Exception as e:
+                    logger.debug(f"获取 {sym} 财报数据失败: {e}")
 
             # J. 新闻情绪分（-15~+15，高权重信源）
             news_s, news_cnt, news_label = _news_score_for(sym, info)
@@ -1535,25 +1920,20 @@ class ConversationHandler:
             self._recommendation_targets[sym] = target_steady
             
         lines.append("─" * 80)
-        lines.append("评分含义: 动量=价格动量, 流动性=成交量归一化, RSI/MACD/ADX/MFI/OBV/量比/EMA均为技术指标加减分, 新闻=100+全球RSS情绪分（高权重）")
+        if not is_crypto:
+            lines.append("评分含义: 动量=价格动量, 流动性=成交量归一化, 宏观=GDP/利率/通胀/VIX综合, RSI/MACD/ADX/MFI/OBV/量比/EMA均为技术指标, 财报=PE/PB/ROE/利润率/增长综合(仅美股), 盈利=财报超预期度, 新闻=100+全球RSS情绪分")
+        else:
+            lines.append("评分含义: 动量=价格动量, 流动性=成交量归一化, 宏观=市场风险偏好/VIX, RSI/MACD/ADX/MFI/OBV/量比/EMA均为技术指标, 新闻=100+全球RSS情绪分（高权重）")
         lines.append("★ 【强制规则】推荐必须且只能从以上排行榜中选取Top5，按综合分从高到低推荐，推荐理由必须引用该品种的综合分和各维度得分亮点。")
         lines.append("★ 【目标价引用】必须直接引用上方「算法目标」行中的计算结果，禁止LLM自行编造数值。")
         return "\n".join(lines)
 
     async def _fetch_all_stock_prices(self) -> dict:
         """
-        从 pykrx 批量获取 KOSPI + KOSDAQ 全量行情。
-        缓存 TTL = 5 分钟（近实时，避免每次拉取等待 5~15 秒）。
+        从 pykrx 批量获取 KOSPI + KOSDAQ 全量实时行情。
+        ★ 无缓存，每次均为实时查询 ★
         返回: {ticker: {name, price, change_pct, volume_krw, market}}
         """
-        import time as _time
-        cls = self.__class__
-        _TTL = 5 * 60   # 5 分钟
-        now = _time.time()
-        if cls._stock_price_cache and (now - cls._stock_price_cache_ts) < _TTL:
-            age_sec = int(now - cls._stock_price_cache_ts)
-            logger.info(f'韩股行情缓存命中（{age_sec}秒前拉取，TTL=5分钟）')
-            return cls._stock_price_cache
         from pykrx import stock as krx
         from datetime import datetime as _dt, timedelta as _td
 
@@ -1590,10 +1970,7 @@ class ConversationHandler:
             _fetch_market('KOSPI'), _fetch_market('KOSDAQ')
         )
         combined = {**kospi, **kosdaq}
-        logger.info(f'한국 전체 주식 배치: {len(combined)} 종목')
-        # 写入缓存
-        cls._stock_price_cache = combined
-        cls._stock_price_cache_ts = _time.time()
+        logger.info(f'[实时] 한국 전체 주식 배치: {len(combined)} 종목')
         return combined
 
     async def _process_with_llm(self, user_message: str) -> str:
@@ -1711,10 +2088,11 @@ class ConversationHandler:
                 except Exception as _e:
                     logger.warning(f'韩股全量行情获取失败: {_e}')
 
-            # 5b. 推荐类 + 加密货币 → 从两个交易所全量拉取价格注入 context
+            # 5b. 推荐类 + 加密货币 → 从两个交易所全量拉取实时价格注入 context
             prefetched_prices: dict = {}
             if is_recommend and (is_crypto_topic or is_general_recommend) and self.crypto_fetcher:
                 try:
+                    # ★ 实时查询（无缓存）
                     prefetched_prices = await self._fetch_all_crypto_prices()
                     if prefetched_prices:
                         # 按 24H 成交量降序（流动性好的排前面），无成交量的排后
@@ -1734,12 +2112,12 @@ class ConversationHandler:
                         context += (
                             f'\n\n【两大交易所全量加密货币实时行情（采集时间: {_crypto_ts}，共{len(prefetched_prices)}个币种，已按24H成交量排序）】\n'
                             f'{price_lines}\n'
-                            f'★ 数据采集于 {_crypto_ts}（有效期5小时内）。'
+                            f'★ 数据采集于 {_crypto_ts}（实时查询，无缓存）。'
                             '以上是 Upbit+Bithumb 两个交易所当前全部币种实时数据，'
                             '请直接基于这些真实数据进行分析和推荐，严禁再输出任何 [QUERY_PRICE] 标签。'
                             '可根据用户要求筛选主流/非主流/涨幅最大/成交量最高等维度。'
                         )
-                        logger.info(f'全量加密货币价格注入: 共{len(prefetched_prices)}个币种，采集时间 {_crypto_ts}')
+                        logger.info(f'[实时] 全量加密货币价格注入: 共{len(prefetched_prices)}个币种，采集时间 {_crypto_ts}')
                         # 量化打分：对Top候选进行多维度评分排名
                         try:
                             scoring_ctx = await self._score_and_rank_candidates(
@@ -1797,7 +2175,7 @@ class ConversationHandler:
                     except Exception as _te:
                         logger.warning(f"技术指标计算注入失败: {_te}")
 
-            # 5c. 行情/价格查询：提前 force_live 查价，避免 LLM 读取批量缓存的整数近似值
+            # 5c. 行情/价格查询：提前实时查价，保证精确度
             PRICE_QUERY_KWS = ['行情', '价格', '现价', '多少钱', '当前价', '涨幅', '跌幅', '今天多少']
             is_price_query = any(k in user_message for k in PRICE_QUERY_KWS)
             if is_price_query and self.crypto_fetcher:
@@ -1812,9 +2190,9 @@ class ConversationHandler:
                     for sym in live_symbols:
                         krw_sym  = f'KRW-{sym}' if not sym.startswith('KRW-') else sym
                         bare_sym = sym.replace('KRW-', '')
-                        info = await self._get_current_price(krw_sym, force_live=True)
+                        info = await self._get_current_price(krw_sym)
                         if not info:
-                            info = await self._get_current_price(bare_sym, force_live=True)
+                            info = await self._get_current_price(bare_sym)
                         if info and info.get('price', 0) > 0:
                             chg = info.get('change_pct', info.get('change', 0))
                             live_lines.append(
@@ -1883,9 +2261,9 @@ class ConversationHandler:
         try:
             import time as _ti_pnl
             positions = dict(self.tracker.positions)
-            # 强制实时查价（force_live=True），与告警循环一致
+            # 实时查价（统一使用实时查询）
             price_results = await asyncio.gather(
-                *[self._get_current_price(sym, force_live=True) for sym in positions],
+                *[self._get_current_price(sym) for sym in positions],
                 return_exceptions=True
             )
             price_map: dict = {}
@@ -1900,9 +2278,10 @@ class ConversationHandler:
             total_value = 0.0
 
             for sym, pos in positions.items():
-                entry  = pos['avg_entry_price']
+                # 使用精确的entry_price（从total_cost计算，避免四舍五入误差）
                 qty    = pos['quantity']
-                cost   = pos.get('total_cost', entry * qty)
+                cost   = pos.get('total_cost', 0)
+                entry  = cost / qty if qty > 0 else pos['avg_entry_price']
                 pinfo  = price_map.get(sym)
                 cur    = pinfo['price'] if pinfo else entry
                 value  = cur * qty
@@ -1910,9 +2289,9 @@ class ConversationHandler:
                 pnl_pct = (pnl / cost * 100) if cost > 0 else 0.0
                 icon   = "🟢" if pnl >= 0 else "🔴"
                 if sym.startswith('KRW-'):
-                    qty_str = f"{qty:.4f}枚"
+                    qty_str = f"{self._fmt_quantity(qty)}枚"
                 else:
-                    qty_str = f"{qty:.2f}股"
+                    qty_str = f"{self._fmt_quantity(qty)}股"
 
                 # 获取目标/止损设置
                 target_price = pos.get('profit_target_price', 0)
@@ -1943,7 +2322,8 @@ class ConversationHandler:
             lines.append(
                 f"───\n"
                 f"💰 总持仓盈亏：₩{self._fmt_signed(total_pnl)}（{total_pnl_pct:+.2f}%）\n"
-                f"💵 剩余现金：₩{self._fmt_price(self.tracker.cash)}"
+                f"💵 剩余现金：₩{self._fmt_price(self.tracker.cash)}\n"
+                f"ℹ️  盈亏为价差收益，未含买入/卖出手续费"
             )
             return "\n".join(lines)
         except Exception as e:
@@ -1954,9 +2334,10 @@ class ConversationHandler:
         """
         极简持仓概览，用于置顶消息（30秒刷新）。
         格式：
-          +2.3% 持有10000ENSO ₩2024万 剩余：₩1325万
+          +2.3% 持有10000ENSO ₩2,024,567 剩余：₩1,325,432
           持仓动态（22:44:06）
         多仓时持仓部分用 | 分隔，剩余资金放最后。
+        金额显示准确数字（带千位分隔符），不四舍五入到"万"。
         """
         if not self.tracker or not self.tracker.positions:
             return ""
@@ -1966,7 +2347,7 @@ class ConversationHandler:
 
             # 每次全量实时查价
             _fresh = await asyncio.gather(
-                *[self._get_current_price(s, force_live=True) for s in positions],
+                *[self._get_current_price(s) for s in positions],
                 return_exceptions=True
             )
             _price_map = {}
@@ -1976,19 +2357,22 @@ class ConversationHandler:
 
             parts = []
             for sym, pos in positions.items():
-                entry  = pos['avg_entry_price']
+                # 使用精确的entry_price（从total_cost计算，避免四舍五入误差）
+                entry  = pos['total_cost'] / pos['quantity'] if pos['quantity'] > 0 else pos['avg_entry_price']
                 qty    = pos['quantity']
                 cur = _price_map.get(sym, entry)
                 market_val = cur * qty
                 pnl_pct = ((cur - entry) / entry * 100) if entry > 0 else 0.0
                 short  = sym.replace('KRW-', '')
-                val_wan = market_val / 10000
+                # 使用准确金额，不四舍五入到"万"
+                val_str = self._fmt_price(market_val)
                 pnl_str = f"{pnl_pct:+.2f}%"
-                parts.append(f"{pnl_str} 持有{qty:g}{short} ₩{val_wan:.0f}万")
-            cash_wan = self.tracker.cash / 10000
+                parts.append(f"{pnl_str} 持有{self._fmt_quantity(qty)}{short} ₩{val_str}")
+            # 显示准确现金余额
+            cash_str = self._fmt_price(self.tracker.cash)
             ts = _dt.now().strftime('%H:%M:%S')
             positions_str = " | ".join(parts)
-            return f"{positions_str} 剩余：₩{cash_wan:.0f}万\n持仓动态（{ts}）"
+            return f"{positions_str} 剩余：₩{cash_str}\n持仓动态（{ts}）"
         except Exception as e:
             logger.debug(f"_build_pinned_summary 失败: {e}")
             return ""
@@ -2041,6 +2425,8 @@ class ConversationHandler:
         _last_pnl_state: dict = {}
         # {sym: last_rapid_drop_alert_ts}，控制急速下跌告警频率（3秒/次）
         _last_rapid_alert: dict = {}
+        # {sym: target_alert_sent_ts}，记录目标价告警发送时间，用于降低后续档位告警频率
+        _target_alert_sent: dict = {}
         
         # 默认5秒扫描；当任一仓位触达 ≥+15% 或 ≤-10% 极端档时降为1秒
         _high_freq: bool = False
@@ -2055,6 +2441,7 @@ class ConversationHandler:
                 if not self.tracker or not self.tracker.positions:
                     _last_sent.clear()
                     _last_pnl_state.clear()
+                    _target_alert_sent.clear()
                     continue
                 
                 positions = dict(self.tracker.positions)
@@ -2065,7 +2452,7 @@ class ConversationHandler:
                         if sym in _last_rapid_alert: del _last_rapid_alert[sym]
 
                 price_results = await asyncio.gather(
-                    *[self._get_current_price(sym, force_live=True) for sym in positions],
+                    *[self._get_current_price(sym) for sym in positions],
                     return_exceptions=True
                 )
                 
@@ -2075,7 +2462,8 @@ class ConversationHandler:
 
                 for sym, res in zip(positions, price_results):
                     pos = positions[sym]
-                    entry = pos['avg_entry_price']
+                    # 使用精确的entry_price（从total_cost计算，避免四舍五入误差）
+                    entry = pos['total_cost'] / pos['quantity'] if pos['quantity'] > 0 else pos['avg_entry_price']
                     qty   = pos['quantity']
                     
                     if isinstance(res, Exception) or not isinstance(res, dict):
@@ -2083,6 +2471,27 @@ class ConversationHandler:
                         
                     cur = res.get('price', entry)
                     pnl_pct = ((cur - entry) / entry * 100) if entry > 0 else 0.0
+
+                    # ── 止损/止盈目标检查 (优先级最高) ──
+                    if self.tracker:
+                        alert = self.tracker.check_stop_loss_and_alert(sym, cur)
+                        if alert:
+                            # 目标价告警优先发送（不受档位CD限制）
+                            severity = alert.get('severity', 'INFO')
+                            msg_text = alert.get('message', '')
+                            if severity == 'CRITICAL':
+                                prefix = "🔴🔴🔴 紧急告警 🔴🔴🔴\n"
+                            elif severity == 'HIGH':
+                                prefix = "⚠️⚠️ 风险警告 \n"
+                            elif severity == 'SUCCESS':
+                                prefix = "✅✅ 推荐离场 \n"
+                            else:
+                                prefix = "🔔 通知 \n"
+                            await send_fn(prefix + msg_text)
+                            logger.info(f"🎯 目标价告警推送 {sym} type={alert['type']}")
+                            
+                            # 记录目标价告警发送时间，用于降低后续档位告警频率
+                            _target_alert_sent[sym] = now_ts
 
                     # ── 急速下跌检测逻辑 (Start) ──
                     # 规则：如果两轮扫描间（约5秒或1秒），跌幅 > 0.8% (绝对值)，且当前总盈亏非大幅盈利
@@ -2127,16 +2536,24 @@ class ConversationHandler:
                     if ivl == 1:
                         _high_freq = True
 
+                    # 🔕 静默策略：如果近5分钟内已发送目标价告警（止盈/止损），则降低档位告警频率避免刷屏
+                    target_alert_ts = _target_alert_sent.get(sym, 0)
+                    if target_alert_ts > 0 and (now_ts - target_alert_ts) < 300:  # 5分钟内
+                        # 将高频档位告警间隔延长至10秒
+                        if ivl < 10:
+                            ivl = 10
+                            logger.debug(f"🔕 {sym} 目标价告警后静默模式：档位告警间隔延长至10秒")
+
                     last = _last_sent.get(sym, 0)
                     if now_ts - last < ivl:
                         continue  # 还没到下次发送时间
 
                     _last_sent[sym] = now_ts
                     short   = sym.replace('KRW-', '')
-                    val_wan = cur * qty / 10000
+                    market_value = cur * qty
                     msg = (
                         f"【{desc}】{short}\n"
-                        f"持{qty:g}枚  市值₩{val_wan:.0f}万    盈亏利润  {pnl_pct:+.2f}%\n"
+                        f"持{self._fmt_quantity(qty)}枚  市值₩{self._fmt_price(market_value)}    盈亏利润  {pnl_pct:+.2f}%\n"
                         f"买入价₩{self._fmt_price(entry)}       现价₩{self._fmt_price(cur)}"
                     )
                     await send_fn(msg)
@@ -2146,6 +2563,9 @@ class ConversationHandler:
                 for sym in list(_last_sent):
                     if sym not in positions:
                         del _last_sent[sym]
+                for sym in list(_target_alert_sent):
+                    if sym not in positions:
+                        del _target_alert_sent[sym]
 
             except Exception as e:
                 logger.error(f"盈亏告警循环异常: {e}")
@@ -2209,7 +2629,7 @@ class ConversationHandler:
                     pnl    = cur * qty - cost
                     pnl_pct = (pnl / cost * 100) if cost > 0 else 0.0
                     icon   = "🟢" if pnl >= 0 else "🔴"
-                    qty_str = f"{qty:g}枚" if sym.startswith('KRW-') else f"{qty:g}股"
+                    qty_str = f"{self._fmt_quantity(qty)}枚" if sym.startswith('KRW-') else f"{self._fmt_quantity(qty)}股"
                     lines.append(
                         f"{icon} {sym}  {qty_str}  买入₩{self._fmt_price(entry)} → 现₩{self._fmt_price(cur)}\n"
                         f"   浮动盈亏 ₩{self._fmt_signed(pnl)}（{pnl_pct:+.2f}%）"
@@ -2255,147 +2675,13 @@ class ConversationHandler:
             logger.warning(f"_build_full_session_report 失败: {e}")
             return ""
 
-    async def start_price_refresh_loop(self, interval_seconds: int = 3600):
-        """
-        后台价格刷新循环：每隔 interval_seconds 秒（默认1小时）
-        并发拉取全量 KRX 股票 + Upbit/Bithumb 加密货币行情并写入类缓存。
-        应作为 asyncio.create_task 在 bot 启动时调用。
-        """
-        logger.info(f'🔄 市场价格定时刷新任务已启动（间隔 {interval_seconds//60} 分钟）')
-        while True:
-            try:
-                logger.info('⏰ 定时刷新：开始拉取全量 KRX 股票 + 加密货币价格...')
-                stock_task  = asyncio.create_task(self._fetch_all_stock_prices_force())
-                crypto_task = asyncio.create_task(self._fetch_all_crypto_prices_force())
-                stock_result, crypto_result = await asyncio.gather(
-                    stock_task, crypto_task, return_exceptions=True
-                )
-                stock_cnt  = len(stock_result)  if isinstance(stock_result,  dict) else 0
-                crypto_cnt = len(crypto_result) if isinstance(crypto_result, dict) else 0
-                logger.info(f'✅ 定时刷新完成：韩股 {stock_cnt} 只 / 加密货币 {crypto_cnt} 个')
-            except Exception as e:
-                logger.error(f'定时刷新失败: {e}')
-            await asyncio.sleep(interval_seconds)
-
-    async def _fetch_all_stock_prices_force(self) -> dict:
-        """强制绕过缓存，直接拉取 KRX 全量行情并写入缓存。"""
-        import time as _time
-        cls = self.__class__
-        from pykrx import stock as krx
-        from datetime import datetime as _dt, timedelta as _td
-
-        today = _dt.now().strftime('%Y%m%d')
-        start = (_dt.now() - _td(days=5)).strftime('%Y%m%d')
-
-        async def _fetch_market(market: str) -> dict:
-            try:
-                df = await asyncio.to_thread(
-                    krx.get_market_price_change, start, today, market=market
-                )
-                if df is None or df.empty:
-                    return {}
-                result = {}
-                for ticker, row in df.iterrows():
-                    try:
-                        result[ticker] = {
-                            'name': str(row.get('종목명', ticker)),
-                            'price': float(row['종가']),
-                            'change_pct': float(row.get('등락률', 0)),
-                            'volume_krw': float(row.get('거래대금', 0)),
-                            'market': market,
-                        }
-                    except Exception:
-                        continue
-                return result
-            except Exception as e:
-                logger.warning(f'[force] pykrx {market} 失败: {e}')
-                return {}
-
-        kospi, kosdaq = await asyncio.gather(
-            _fetch_market('KOSPI'), _fetch_market('KOSDAQ')
-        )
-        combined = {**kospi, **kosdaq}
-        if combined:
-            cls._stock_price_cache    = combined
-            cls._stock_price_cache_ts = _time.time()
-            logger.info(f'[force] KRX 缓存已更新: {len(combined)} 只')
-        return combined
-
-    async def _fetch_all_crypto_prices_force(self) -> dict:
-        """强制绕过缓存，直接拉取 Upbit+Bithumb 全量行情并写入缓存。"""
-        import time as _time
-        cls = self.__class__
-        combined: dict = {}
-
-        async def _upbit():
-            try:
-                import pyupbit as _upbit_mod
-                markets = await asyncio.to_thread(_upbit_mod.get_tickers, fiat='KRW')
-                if not markets:
-                    return {}
-                raw = await asyncio.to_thread(_upbit_mod.get_current_price, markets)
-                if not raw:
-                    return {}
-                return {
-                    sym: {'price': float(price), 'change_pct': 0.0, 'volume': 0, 'exchange': 'upbit'}
-                    for sym, price in raw.items() if price is not None
-                }
-            except Exception as e:
-                logger.warning(f'[force] Upbit 失败: {e}')
-                return {}
-
-        async def _bithumb():
-            try:
-                import pybithumb as _bithumb_mod
-                raw = await asyncio.to_thread(_bithumb_mod.get_current_price, 'ALL')
-                if not isinstance(raw, dict):
-                    return {}
-                result = {}
-                for coin, data in raw.items():
-                    if coin == 'date':
-                        continue
-                    try:
-                        price = float(data.get('closing_price', 0))
-                        prev  = float(data.get('prev_closing_price', price) or price)
-                        chg   = ((price - prev) / prev * 100) if prev else 0.0
-                        vol   = float(data.get('acc_trade_value_24H', 0) or 0)
-                        result[f'KRW-{coin}'] = {
-                            'price': price, 'change_pct': round(chg, 2),
-                            'volume': vol, 'exchange': 'bithumb',
-                        }
-                    except Exception:
-                        continue
-                return result
-            except Exception as e:
-                logger.warning(f'[force] Bithumb 失败: {e}')
-                return {}
-
-        upbit_data, bithumb_data = await asyncio.gather(_upbit(), _bithumb())
-        combined.update(bithumb_data)
-        for sym, info in upbit_data.items():
-            if sym in combined:
-                combined[sym]['price']    = info['price']
-                combined[sym]['exchange'] = 'upbit+bithumb'
-            else:
-                combined[sym] = info
-
-        if combined:
-            cls._crypto_price_cache    = combined
-            cls._crypto_price_cache_ts = _time.time()
-            logger.info(f'[force] 加密货币缓存已更新: {len(combined)} 个')
-        return combined
+    # ★ 已删除 start_price_refresh_loop() - 无缓存后定时刷新任务已无必要 ★
 
 
-    # 行情数据 TTL 缓存（1.5小时，配合每小时自动刷新后台任务）
-    _stock_price_cache: dict = {}           # {ticker: info}
-    _stock_price_cache_ts: float = 0.0     # 上次拉取时间（time.time()）
-    _crypto_price_cache: dict = {}
-    _crypto_price_cache_ts: float = 0.0
-    _MARKET_CACHE_TTL: int = 90 * 60        # 1.5小时（秒），配合1小时刷新任务
-
-    # 告警循环写入的最新持仓实时价缓存（5秒有效），供置顶摘要复用，保证二者价格一致
-    _live_pos_price_cache: dict = {}        # {symbol: {'price': float, 'ts': float}}
-    _LIVE_POS_CACHE_TTL: float = 5.0        # 秒
+    # ★ 所有价格缓存已删除，统一使用实时查询 ★
+    # 但为保证同一会话内价格一致性，添加10秒超短期缓存（避免用户困惑）
+    _session_price_cache: dict = {}        # {symbol: {'price': float, 'change_pct': float, 'exchange': str, 'ts': float}}
+    _SESSION_PRICE_TTL: int = 10           # 10秒（会话级别，保证连续查询一致性）
 
     # 新闻头条缓存（30分钟，供打分引擎情绪分析使用）
     _news_headlines_cache: list = []        # [headline_text_lower, ...]
@@ -2970,7 +3256,10 @@ class ConversationHandler:
 - K线+交易量+资金流向 → [QUERY_KLINE|代码]（韩股6位数字代码用pykrx；美股用TSLA/AAPL/NVDA等，美股仅含当日OHLC，无历史K线）
 - 监控状态 → [CHECK_MONITORING_STATUS]
 - 查询公告 → [QUERY_ANNOUNCEMENTS|公司名称或代码]（可选参数）
-- 调整总资产/现金 → [ACTION:ADJUST_TOTAL_ASSET|金额]（纯数字，单位韩元）
+- **【资金管理 - 严格区分】**
+  * "添加/增加/充值现金XXXXX" → 系统已自动处理，无需输出任何标签，仅回复确认即可
+  * "总资产调整为/改为/设为XXXXX" → [ACTION:ADJUST_TOTAL_ASSET|金额]（设置总资产为指定金额）
+  * 注意："添加"是增加现金，"调整为"是设置总资产，两者完全不同！
 
 回复示例（简短纯文本）：
 ✅ 已买入 三星电子 2.66股 @ ₩75,000
@@ -3113,11 +3402,9 @@ class ConversationHandler:
             if symbol.upper().startswith('KRW-') or symbol.upper().startswith('USDT-'):
                 return symbol
             if symbol.isalpha() and symbol.isupper() and len(symbol) <= 10:
-                # 先查加密货币缓存（避免短字母 ticker 被当成股票）
+                # 短字母ticker：优先尝试作为加密货币（KRW-前缀）
                 krw_sym = f'KRW-{symbol}'
-                if krw_sym in self.__class__._crypto_price_cache:
-                    return krw_sym
-                return symbol
+                return krw_sym  # 后续查询会判断是否存在
 
             # 3. 在 KRX 名称缓存里查（支持任意韩国上市公司名称）
             krx_cache = self.__class__._krx_name_to_code
@@ -3226,7 +3513,7 @@ class ConversationHandler:
                             tag_pattern,
                             f"\n\n✅ 买入成功！\n"
                             f"   币种：{symbol}\n"
-                            f"   数量：{quantity:g}\n"
+                            f"   数量：{self._fmt_quantity(quantity)}\n"
                             f"   单价：₩{self._fmt_price(current_price)}\n"
                             f"   总金额：₩{self._fmt_price(total_amount)}\n"
                             f"   24h涨跌：{price_info.get('change_pct', 0):+.2f}%\n"
@@ -3236,7 +3523,7 @@ class ConversationHandler:
                             clean_response
                         )
                         self._auto_save()
-                        logger.info(f"✅ 自动买入: {symbol} {quantity:g} @ {current_price:,.0f} (Target: {target_p})")
+                        logger.info(f"✅ 自动买入: {symbol} {self._fmt_quantity(quantity)} @ {current_price:,.0f} (Target: {target_p})")
                     else:
                         reason = result.get('reason', '')
                         if reason == 'insufficient_funds':
@@ -3309,7 +3596,7 @@ class ConversationHandler:
 
                     # 构造卖出回执
                     msg_lines = [
-                        f"\n\n✅ 卖出成功：{symbol} {quantity:g}个/股 @ ₩{self._fmt_price(price)}",
+                        f"\n\n✅ 卖出成功：{symbol} {self._fmt_quantity(quantity)}个/股 @ ₩{self._fmt_price(price)}",
                     ]
                     if entry_price > 0:
                         # 若用户指定了卖出价，额外展示「若按市价」的预计盈亏
@@ -3379,7 +3666,15 @@ class ConversationHandler:
                     custom_profit_target_price=target_p
                 )
                 
+                # 计算手续费（仅加密货币）
+                _is_crypto = 'KRW-' in symbol or ('-' in symbol and not symbol.isdigit())
+                _fee = round(quantity * price * 0.0025, 0) if _is_crypto else 0.0
+                
                 if result.get('success', True):
+                    # 手续费单独扣除（不计入持仓成本）
+                    if _fee > 0:
+                        self.tracker.cash -= _fee
+                    
                     pnl_block = await self._build_full_session_report()
                     pnl_text  = f"\n\n{pnl_block}" if pnl_block else ""
                     
@@ -3387,11 +3682,15 @@ class ConversationHandler:
                     if target_p:
                         pct = (target_p - price) / price * 100
                         target_msg = f"\n   🎯 止盈目标：₩{self._fmt_price(target_p)} (+{pct:.1f}%)"
+                    
+                    fee_msg = f"\n   手续费(0.25%)：₩{self._fmt_price(_fee)}" if _fee else ""
                         
                     clean_response = re.sub(
                         buy_tag_re,
-                        f"\n\n✅ 买入成功：{symbol} {quantity:g}个/股 @ ₩{self._fmt_price(price)}\n"
-                        f"   总金额：₩{self._fmt_price(quantity * price)}\n"
+                        f"\n\n✅ 买入成功：{symbol} {self._fmt_quantity(quantity)}个/股 @ ₩{self._fmt_price(price)}\n"
+                        f"   成本单价：₩{self._fmt_price(price)}"
+                        f"{fee_msg}\n"
+                        f"   总扣款：₩{self._fmt_price(quantity * price + _fee)}\n"
                         f"   剩余资金：₩{self._fmt_price(self.tracker.cash)}"
                         f"{target_msg}"
                         f"{pnl_text}",
@@ -3548,25 +3847,24 @@ class ConversationHandler:
         s = ConversationHandler._fmt_price(abs(amount))
         return f'+{s}' if amount >= 0 else f'-{s}'
 
+    @staticmethod
+    def _fmt_quantity(qty: float) -> str:
+        """格式化数量，保留完整精度，去掉不必要的尾随零
+        例如：3349.57625094 -> "3349.57625094"
+             3349.00000000 -> "3349"
+             3349.50000000 -> "3349.5"
+        """
+        # 保留最多12位小数，然后去掉尾随0和小数点
+        return f"{qty:.12f}".rstrip('0').rstrip('.')
+
     async def _get_current_price(self, symbol: str, force_live: bool = False) -> Optional[Dict[str, Any]]:
         """获取当前价格（加密货币或股票）。
-        force_live=True 时绕过缓存直接从交易所查询实时数据。
+        ★ 无缓存，统一使用实时查询 ★
         """
 
         # 1. 加密货币（KRW-BTC, USDT-BTC等）
         if symbol.startswith('KRW-') or symbol.startswith('USDT-'):
-            # ★ 命中类缓存（每小时刷新），force_live 时跳过
-            if not force_live:
-                cached = self.__class__._crypto_price_cache.get(symbol)
-                if cached and cached.get('price', 0) > 0:
-                    logger.info(f'[cache] {symbol}: ₩{self._fmt_price(cached["price"])} ({cached.get("change_pct", 0):+.2f}%)')
-                    return {
-                        'price':      cached['price'],
-                        'change_pct': cached.get('change_pct', 0.0),
-                        'volume':     cached.get('volume', 0),
-                        'exchange':   cached.get('exchange', '?'),
-                    }
-            # 缓存未命中 或 force_live → 实时查询（Bithumb 优先，其次 Upbit）
+            # 实时查询（Bithumb 优先，其次 Upbit）
             if self.crypto_fetcher:
                 try:
                     price_data = await self.crypto_fetcher.get_bithumb_price(symbol.replace('KRW-', ''))
@@ -3589,18 +3887,7 @@ class ConversationHandler:
         # 1b. 裸字母加密货币 ticker（如 EPT、DOGE）→ 转为 KRW- 前缀重试
         if symbol.isalpha() and symbol.isupper() and len(symbol) <= 10:
             krw_sym = f'KRW-{symbol}'
-            # ① 先查类级别缓存（force_live 时跳过）
-            if not force_live:
-                cached = self.__class__._crypto_price_cache.get(krw_sym)
-                if cached and cached.get('price', 0) > 0:
-                    logger.info(f'[cache-bare] {symbol} → {krw_sym}: ₩{self._fmt_price(cached["price"])}')
-                    return {
-                        'price':      cached['price'],
-                        'change_pct': cached.get('change_pct', 0.0),
-                        'volume':     cached.get('volume', 0),
-                        'exchange':   cached.get('exchange', '?'),
-                    }
-            # ② 实时查（Bithumb 优先，其次 Upbit）
+            # 实时查（Bithumb 优先，其次 Upbit）
             if self.crypto_fetcher:
                 try:
                     price_data = await self.crypto_fetcher.get_bithumb_price(symbol)

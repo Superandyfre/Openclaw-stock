@@ -302,7 +302,8 @@ class PositionTracker:
             return None
         
         position = self.positions[symbol]
-        entry_price = position['avg_entry_price']
+        # 使用精确的entry_price（从total_cost计算，避免四舍五入误差）
+        entry_price = position['total_cost'] / position['quantity'] if position['quantity'] > 0 else position['avg_entry_price']
         stop_loss_price = position['stop_loss_price']
         profit_target_price = position['profit_target_price']
         
@@ -320,7 +321,7 @@ class PositionTracker:
                     "symbol": symbol,
                     "type": alert_type,
                     "severity": "CRITICAL",
-                    "message": f"!! 强制止损触发 !! {symbol}\n当前价格: {current_price:,.0f}\n止损价: {stop_loss_price:,.0f}\n亏损: {pnl_pct:.2f}%\n立即平仓！",
+                    "message": f"!! 强制止损触发 !! {symbol}\n当前价格: {current_price:,.2f}\n止损价: {stop_loss_price:,.2f}\n亏损: {pnl_pct:.2f}%\n立即平仓！",
                     "pnl_pct": pnl_pct,
                     "current_price": current_price,
                     "stop_loss_price": stop_loss_price,
@@ -328,7 +329,7 @@ class PositionTracker:
                 }
                 position['stop_loss_triggered'] = True
                 position['alert_sent'].append(alert_type)
-                logger.critical(f"🔴 STOP LOSS TRIGGERED: {symbol} @ {current_price:,.0f} ({pnl_pct:.2f}%)")
+                logger.critical(f"🔴 STOP LOSS TRIGGERED: {symbol} @ {current_price:,.2f} ({pnl_pct:.2f}%)")
         
         # ⚠️ 止损警告：接近-10%（-8%以上）
         elif pnl_pct <= self.STOP_LOSS_WARNING_PCT:
@@ -339,14 +340,14 @@ class PositionTracker:
                     "symbol": symbol,
                     "type": alert_type,
                     "severity": "HIGH",
-                    "message": f"! 风险告警 ! {symbol}\n当前价格: {current_price:,.0f}\n亏损: {pnl_pct:.2f}%\n距离止损线: {distance_to_stop:,.0f}韩元\n请密切关注！",
+                    "message": f"! 风险告警 ! {symbol}\n当前价格: {current_price:,.2f}\n亏损: {pnl_pct:.2f}%\n距离止损线: {distance_to_stop:,.2f}韩元\n请密切关注！",
                     "pnl_pct": pnl_pct,
                     "current_price": current_price,
                     "stop_loss_price": stop_loss_price,
                     "action_required": "MONITOR_CLOSELY"
                 }
                 position['alert_sent'].append(alert_type)
-                logger.warning(f"⚠️ STOP LOSS WARNING: {symbol} @ {current_price:,.0f} ({pnl_pct:.2f}%)")
+                logger.warning(f"⚠️ STOP LOSS WARNING: {symbol} @ {current_price:,.2f} ({pnl_pct:.2f}%)")
         
         # ✅ 收益达标：+20%以上
         elif current_price >= profit_target_price:
@@ -356,14 +357,14 @@ class PositionTracker:
                     "symbol": symbol,
                     "type": alert_type,
                     "severity": "SUCCESS",
-                    "message": f"+ 收益达标 + {symbol}\n当前价格: {current_price:,.0f}\n盈利: {pnl_pct:.2f}%\n已达20%目标！考虑获利了结！",
+                    "message": f"+ 收益达标 + {symbol}\n当前价格: {current_price:,.2f}\n盈利: {pnl_pct:.2f}%\n已达目标！考虑获利了结！",
                     "pnl_pct": pnl_pct,
                     "current_price": current_price,
                     "profit_target_price": profit_target_price,
                     "action_required": "CONSIDER_SELL"
                 }
                 position['alert_sent'].append(alert_type)
-                logger.info(f"✅ PROFIT TARGET: {symbol} @ {current_price:,.0f} ({pnl_pct:.2f}%)")
+                logger.info(f"✅ PROFIT TARGET: {symbol} @ {current_price:,.2f} ({pnl_pct:.2f}%) [target_price={profit_target_price:,.2f}]")
         
         # 📈 重大利好：+15%以上
         elif pnl_pct >= self.MAJOR_GAIN_PCT:
@@ -373,13 +374,13 @@ class PositionTracker:
                     "symbol": symbol,
                     "type": alert_type,
                     "severity": "GOOD_NEWS",
-                    "message": f"++ 重大利好 ++ {symbol}\n当前价格: {current_price:,.0f}\n盈利: {pnl_pct:.2f}%\n距离20%目标: {self.PROFIT_TARGET_PCT - pnl_pct:.1f}%",
+                    "message": f"++ 重大利好 ++ {symbol}\n当前价格: {current_price:,.2f}\n盈利: {pnl_pct:.2f}%\n距离20%目标: {self.PROFIT_TARGET_PCT - pnl_pct:.1f}%",
                     "pnl_pct": pnl_pct,
                     "current_price": current_price,
                     "action_required": "HOLD"
                 }
                 position['alert_sent'].append(alert_type)
-                logger.info(f"📈 MAJOR GAIN: {symbol} @ {current_price:,.0f} ({pnl_pct:.2f}%)")
+                logger.info(f"📈 MAJOR GAIN: {symbol} @ {current_price:,.2f} ({pnl_pct:.2f}%)")
         
         # 如果有告警且设置了回调函数，立即发送
         if alert and self.alert_callback:
